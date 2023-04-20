@@ -1,0 +1,15 @@
+{{- define "mlflow-oidc-proxy.configMapContents" -}}
+data:
+  '{{ .Values.config.existingConfigMap.key }}': |-
+    {{- .Values.config.yaml | toYaml | nindent 4 }}
+{{- end -}}
+
+{{- if not .Values.config.existingConfigMap.name }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mlflow-oidc-proxy.configMapName" . }}
+  labels:
+    {{ include "mlflow-oidc-proxy.labels" . | nindent 4 }}
+{{ include "mlflow-oidc-proxy.configMapContents" . }}
+{{- end }}

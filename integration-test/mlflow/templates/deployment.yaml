@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mlflow.fullname" . }}
+  labels:
+    {{- include "mlflow.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mlflow.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "mlflow.selectorLabels" . | nindent 8 }}
+        mlflow/config-hash: '{{ include "mlflow.configMapData" . | adler32sum }}'
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "mlflow.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.env }}
+          env:
+          {{- . | toYaml | nindent 10 }}
+          {{- end }}
+          command: [/usr/bin/docker-entrypoint.sh]
+          {{ if or .Values.staticPrefix .Values.args }}
+          args:
+          {{- with .Values.staticPrefix }}
+          - --static-prefix={{ . }}
+          {{- end }}
+          {{- with .Values.args }}
+          {{- . | toYaml | nindent 10 }}
+          {{- end }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.staticPrefix | default "/" }}
+              port: http
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.staticPrefix | default "/" }}
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          - name: {{ .Chart.Name }}
+            mountPath: /usr/bin/docker-entrypoint.sh
+            subPath: docker-entrypoint.sh
+          - name: {{ .Chart.Name }}
+            mountPath: /var/run/requirements.txt
+            subPath: requirements.txt
+          {{- with .Values.volumeMounts }}
+          {{- . | toYaml | nindent 10 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: {{ .Chart.Name }}
+        configMap:
+          name: {{ include "mlflow.fullname" . }}
+          defaultMode: 0750
+      {{- with .Values.volumes }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}

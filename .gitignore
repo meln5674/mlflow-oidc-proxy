@@ -1,0 +1,8 @@
+/main
+/proxy
+*.swp
+integration-test/kind.config
+integration-test/*-configmap.yaml
+integration-test/groups
+integration-test/images
+integration-test/kubeconfig

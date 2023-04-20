@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mlflow-oidc-proxy.fullname" . }}
+  labels:
+    {{- include "mlflow-oidc-proxy.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mlflow-oidc-proxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "mlflow-oidc-proxy.selectorLabels" . | nindent 8 }}
+        {{- if not .Values.credentials.existingSecret.name }}
+        mlflow-oidc-proxy/secret-hash: '{{ include "mlflow-oidc-proxy.secretContents" . | adler32sum }}'
+        {{- end }}
+        {{- if not .Values.config.existingConfigMap.name }}
+        mlflow-oidc-proxy/configmap-hash: '{{ include "mlflow-oidc-proxy.configMapContents" . | adler32sum }}'
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "mlflow-oidc-proxy.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: NEXUS_OIDC_PROXY_NEXUS_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mlflow-oidc-proxy.secretName" . }}
+                key: {{ .Values.credentials.existingSecret.usernameKey }}
+          - name: NEXUS_OIDC_PROXY_NEXUS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "mlflow-oidc-proxy.secretName" . }}
+                key: {{ .Values.credentials.existingSecret.passwordKey }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          - name: config
+            mountPath: /etc/mlflow-oidc-proxy/mlflow-oidc-proxy.cfg
+            subPath: {{ .Values.config.existingConfigMap.key }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "mlflow-oidc-proxy.configMapName" . }}
+
