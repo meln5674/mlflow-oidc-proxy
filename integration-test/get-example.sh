@@ -1,7 +1,7 @@
 #!/bin/bash -xeu
 
-if [ -z "${MLFLOW_TRACKING_TOKEN" ]; then
-    echo 'MLFLOW_TRACKING_TOKEN not set, navigate to https://mlflow.mlflow-oidc-proxy-it.cluster/oauth2/sign_in to generate your token"
+if [ -z "${MLFLOW_TRACKING_TOKEN}" ]; then
+    echo 'MLFLOW_TRACKING_TOKEN not set, navigate to https://mlflow.mlflow-oidc-proxy-it.cluster/oauth2/sign_in to generate your token'
     exit 1
 fi
 

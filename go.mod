@@ -4,19 +4,23 @@ go 1.19
 
 require (
 	github.com/Masterminds/sprig v2.22.0+incompatible
+	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/aquasecurity/yaml v0.0.0-20150909031657-73d445a93680
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/uuid v1.3.0
 	github.com/meln5674/gingk8s v0.0.0-20230420052937-707ed08a364f
 	github.com/meln5674/gosh v0.0.0-20230418002009-f731b8b62575
 	github.com/onsi/ginkgo/v2 v2.9.2
 	github.com/onsi/gomega v1.27.6
+	github.com/pkg/errors v0.9.1
 	github.com/spf13/pflag v1.0.5
 )
 
 require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
+	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
