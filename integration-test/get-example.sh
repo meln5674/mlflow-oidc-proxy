@@ -1,13 +1,13 @@
 #!/bin/bash -xeu
 
-if [ -z "${MLFLOW_TRACKING_TOKEN" ]; then
-    echo 'MLFLOW_TRACKING_TOKEN not set, navigate to https://mlflow.mlflow-oidc-proxy-it.cluster/oauth2/sign_in to generate your token"
+if [ -z "${MLFLOW_TRACKING_TOKEN}" ]; then
+    echo 'MLFLOW_TRACKING_TOKEN not set, navigate to https://mlflow.mlflow-oidc-proxy-it.cluster/oauth2/sign_in to generate your token'
     exit 1
 fi
 
-if ! [ -d mlflow-example ]; then
-    git clone https://github.com/alfozan/mlflow-example.git
-fi
+rm -rf mlflow-example
+rm -f get-example-done*
+git clone https://github.com/alfozan/mlflow-example.git
 cp /mnt/host/mlflow-oidc-proxy/integration-test/MLflow-example-notebook.ipynb mlflow-example/
 
 pip install --user -r mlflow-example/requirements.txt
@@ -19,3 +19,5 @@ cat > mlflow-example/mlflow-config.json <<EOF
     "cert-path": "/etc/ssl/certs/ca-certificates.crt"
 }
 EOF
+
+touch get-example-done-${TEST_TS}

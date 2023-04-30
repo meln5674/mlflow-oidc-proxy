@@ -76,17 +76,16 @@ for tenant in 1 2; do
     fi
     if ! kcadm.sh get users \
             -r integration-test \
-            -q username=test \
+            -q username="tenant-${tenant}" \
             -F username \
             | tee /dev/stderr \
-            | grep -q '"test"' \
+            | grep -q '"'"tenant-${tenant}"'"' \
             ; then
         user_id=$(
             kcadm.sh create users \
                 -r integration-test \
-                -s username=test \
-                -s email=test@test.test \
-                -s realmRoles='["tenant-'"${tenant}"'"]' \
+                -s username="tenant-${tenant}" \
+                -s email="tenant-${tenant}@test.test" \
                 -s emailVerified=true \
                 -s credentials='[{"type": "password", "value": "test", "temporary": false}]' \
                 -s enabled=true
@@ -103,4 +102,9 @@ for tenant in 1 2; do
                 | tee /dev/stderr
         )
     fi
+
+    kcadm.sh add-roles \
+        -r integration-test \
+        --rolename "tenant-${tenant}" \
+        --uusername "tenant-${tenant}"
 done

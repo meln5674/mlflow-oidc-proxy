@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/chromedp/chromedp"
+	"github.com/onsi/biloba"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -21,6 +24,8 @@ func TestMlflowOidcProxy(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "mlflow-oidc-proxy Suite")
 }
+
+var b *biloba.Biloba
 
 var _ = BeforeSuite(func(ctx context.Context) {
 	var err error
@@ -142,6 +147,14 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		NoSuiteCleanup: true,
 	})
 	Gingk8sSetup(ctx)
+
+	biloba.SpinUpChrome(GinkgoT(),
+		chromedp.ProxyServer("http://localhost:8080"),
+		chromedp.Flag("headless", false),
+		chromedp.Flag("ignore-certificate-errors", "1"),
+	)
+	b = biloba.ConnectToChrome(GinkgoT())
+	keycloakLogin(true)
 })
 
 var (
@@ -262,6 +275,7 @@ spec:
 		Set: gingk8s.Object{
 			"controllerAddresses[0].className": "nginx",
 			"controllerAddresses[0].address":   "ingress-nginx-controller.default.svc.cluster.local",
+			"hostPort.enabled":                 true,
 		},
 	}
 
@@ -595,6 +609,7 @@ func getKeycloakClientSecret(clientID string) func(context.Context, gingk8s.Clus
 		err := KubectlExec(ctx, cluster, "keycloak-0", "cat", []string{"/tmp/client-secrets/" + clientID}).
 			WithStreams(gosh.FuncOut(gosh.SaveString(&clientSecret))).
 			Run()
+		clientSecret = strings.TrimSuffix(clientSecret, "\n")
 		return clientSecret, err
 	}
 }
