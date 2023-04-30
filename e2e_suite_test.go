@@ -183,7 +183,7 @@ var (
 				Version: "v1.11.1",
 			},
 		},
-		Set: map[string]interface{}{
+		Set: gingk8s.Object{
 			"installCRDs":        true,
 			"prometheus.enabled": false,
 		},

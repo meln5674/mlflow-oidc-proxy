@@ -24,6 +24,7 @@ type PredictionOutput struct {
 }
 
 func nodes(sel interface{}) []*cdp.Node {
+	GinkgoHelper()
 	var toReturn []*cdp.Node
 	Expect(chromedp.Run(b.Context, chromedp.QueryAfter(sel, func(ctx context.Context, id cdpruntime.ExecutionContextID, nodes ...*cdp.Node) error {
 		toReturn = nodes
@@ -33,6 +34,7 @@ func nodes(sel interface{}) []*cdp.Node {
 }
 
 func mouseClick(sel interface{}, opts ...chromedp.MouseOption) {
+	GinkgoHelper()
 	Expect(chromedp.Run(b.Context, chromedp.QueryAfter(sel, func(ctx context.Context, id cdpruntime.ExecutionContextID, nodes ...*cdp.Node) error {
 		Expect(nodes).To(HaveLen(1))
 		return chromedp.MouseClickNode(nodes[0], opts...).Do(ctx)
@@ -40,6 +42,7 @@ func mouseClick(sel interface{}, opts ...chromedp.MouseOption) {
 }
 
 func mouseMove(sel interface{}, opts ...chromedp.MouseOption) {
+	GinkgoHelper()
 	Expect(chromedp.Run(b.Context, chromedp.QueryAfter(sel, func(ctx context.Context, id cdpruntime.ExecutionContextID, nodes ...*cdp.Node) error {
 		Expect(nodes).To(HaveLen(1))
 		return MouseMoveNode(nodes[0], opts...).Do(ctx)
@@ -49,6 +52,7 @@ func mouseMove(sel interface{}, opts ...chromedp.MouseOption) {
 // MouseClickXY is an action that sends a left mouse button click (i.e.,
 // mousePressed and mouseReleased event) to the X, Y location.
 func MouseMoveXY(x, y float64, opts ...chromedp.MouseOption) chromedp.MouseAction {
+	GinkgoHelper()
 	return chromedp.ActionFunc(func(ctx context.Context) error {
 		p := &input.DispatchMouseEventParams{
 			Type: input.MouseMoved,
@@ -71,6 +75,7 @@ func MouseMoveXY(x, y float64, opts ...chromedp.MouseOption) chromedp.MouseActio
 // Note that the window will be scrolled if the node is not within the window's
 // viewport.
 func MouseMoveNode(n *cdp.Node, opts ...chromedp.MouseOption) chromedp.MouseAction {
+	GinkgoHelper()
 	return chromedp.ActionFunc(func(ctx context.Context) error {
 		t := cdp.ExecutorFromContext(ctx).(*chromedp.Target)
 		if t == nil {
@@ -110,6 +115,7 @@ func MouseMoveNode(n *cdp.Node, opts ...chromedp.MouseOption) chromedp.MouseActi
 }
 
 func EncodeNoChar(r rune) []*input.DispatchKeyEventParams {
+	GinkgoHelper()
 	// force \n -> \r
 	if r == '\n' {
 		r = '\r'
@@ -138,6 +144,7 @@ func EncodeNoChar(r rune) []*input.DispatchKeyEventParams {
 }
 
 func KeyEventNoChar(keys string, opts ...chromedp.KeyOption) chromedp.KeyAction {
+	GinkgoHelper()
 	return chromedp.ActionFunc(func(ctx context.Context) error {
 		for _, r := range keys {
 			for _, k := range EncodeNoChar(r) {
@@ -159,6 +166,7 @@ var _ = BeforeEach(func() {
 }, OncePerOrdered)
 
 func keycloakToken(needCredentials bool) string {
+	GinkgoHelper()
 	By("Navigating to the oauth proxy sign-in")
 	mlflowURL := fmt.Sprintf("https://%s/oauth2/sign_in", oauth2Proxy.Set["ingress.hostname"])
 	b.Navigate(mlflowURL)
@@ -179,6 +187,7 @@ func keycloakToken(needCredentials bool) string {
 }
 
 func keycloakLogin(needCredentials bool) {
+	GinkgoHelper()
 	By("Navigating to the oauth proxy sign-in")
 	mlflowURL := fmt.Sprintf("https://%s/oauth2/sign_in", oauth2Proxy.Set["ingress.hostname"])
 	b.Navigate(mlflowURL)
@@ -233,8 +242,12 @@ var _ = Describe("Tenant 1", func() {
 		mouseClick(launcherButton, chromedp.ButtonLeft)
 
 		// mouseClick(newLauncherButton, chromedp.ButtonLeft)
-		terminalButton := `div.jp-LauncherCard[title="Start a new terminal session"]`
+		// For whatever reason, when using a selector, this element is selected twice
+		// terminalButton := `div.jp-LauncherCard[title="Start a new terminal session"]`
+		terminalButton := b.XPath(`/html/body/div[1]/div[3]/div[2]/div[1]/div[3]/div[4]/div[3]/div/div/div[4]/div[2]/div[1]`)
 		Eventually(terminalButton, "10s").Should(b.Exist())
+
+		// time.Sleep(1 * time.Hour)
 
 		By("Opening a terminal")
 		mouseClick(terminalButton, chromedp.ButtonLeft)
