@@ -431,7 +431,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 
 				cases := map[string]string{
 					"the mlflow.user tag is not set": `{"name": "foo"}`,
-					"the mlflow.user tag is set":     `{"name": "foo", "tags": { "mlflow.user": " bogus-user" } }`,
+					"the mlflow.user tag is set":     `{"name": "foo", "tags": { "mlflow.user": "bogus-user" } }`,
 				}
 
 				for name, reqBody := range cases {
@@ -446,7 +446,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/experiments/create"))
 							body := make(map[string]interface{})
 							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
-							Expect(body).To(HaveKeyWithValue("tags", HaveExactElements(HaveKeyWithValue("mlflow.user", tokenSubject))))
+							Expect(body).To(HaveKeyWithValue("tags", HaveKeyWithValue("mlflow.user", tokenSubject)))
 						})
 					})
 				}
@@ -469,7 +469,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 					"neither the mlflow.user tag nor user_id not set": `{"experiment_id": "foo", "run_name": "bar", "start_time": 1000}`,
 					"just the mlflow.user tag is set but not user_id": `{"experiment_id": "foo", "run_name": "bar", "start_time": 1000, "tags": { "mlflow.user": "bogus-user" } }`,
 					"just user_id is set but not the mlflow.user tag": `{"experiment_id": "foo", "run_name": "bar", "start_time": 1000, "user_id": "bogus-user" }`,
-					"both the mlflow.user tag and user_id are set":    `{"experiment_id": "foo", "run_name": "bar", "start_time": 1000, "user_id": "bogus-user", "tags": { "mlflow.user": { "a-different-bogus-user" } } }`,
+					"both the mlflow.user tag and user_id are set":    `{"experiment_id": "foo", "run_name": "bar", "start_time": 1000, "user_id": "bogus-user", "tags": { "mlflow.user": "a-different-bogus-user" } }`,
 				}
 				for name, reqBody := range cases {
 					When(name, func() {
@@ -482,7 +482,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/runs/create"))
 							body := make(map[string]interface{})
 							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
-							Expect(body).To(HaveKeyWithValue("tags", HaveExactElements(HaveKeyWithValue("mlflow.user", tokenSubject))))
+							Expect(body).To(HaveKeyWithValue("tags", HaveKeyWithValue("mlflow.user", tokenSubject)))
 							Expect(body).To(HaveKeyWithValue("user_id", tokenSubject))
 						})
 					})
@@ -625,7 +625,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 
 					cases := map[string]string{
 						"the mlflow.user tag is not set": `{"name": "foo"}`,
-						"the mlflow.user tag is set":     `{"name": "foo", "tags": { "mlflow.user": " bogus-user" } }`,
+						"the mlflow.user tag is set":     `{"name": "foo", "tags": { "mlflow.user": "bogus-user" } }`,
 					}
 
 					for name, reqBody := range cases {
@@ -640,7 +640,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 								Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/registered-models/create"))
 								body := make(map[string]interface{})
 								Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
-								Expect(body).To(HaveKeyWithValue("tags", HaveExactElements(HaveKeyWithValue("mlflow.user", tokenSubject))))
+								Expect(body).To(HaveKeyWithValue("tags", HaveKeyWithValue("mlflow.user", tokenSubject)))
 							})
 						})
 					}
@@ -741,7 +741,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 
 					cases := map[string]string{
 						"the mlflow.user tag is not set": `{"name": "foo"}`,
-						"the mlflow.user tag is set":     `{"name": "foo", "tags": { "mlflow.user": " bogus-user" } }`,
+						"the mlflow.user tag is set":     `{"name": "foo", "tags": { "mlflow.user": "bogus-user" } }`,
 					}
 
 					for name, reqBody := range cases {
@@ -756,7 +756,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 								Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/model-versions/create"))
 								body := make(map[string]interface{})
 								Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
-								Expect(body).To(HaveKeyWithValue("tags", HaveExactElements(HaveKeyWithValue("mlflow.user", tokenSubject))))
+								Expect(body).To(HaveKeyWithValue("tags", HaveKeyWithValue("mlflow.user", tokenSubject)))
 							})
 						})
 					}

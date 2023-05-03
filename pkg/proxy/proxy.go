@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"runtime/debug"
 	"strings"
 
@@ -336,7 +338,7 @@ func (p *ProxyState) InternalError(w http.ResponseWriter, req *http.Request, req
 	w.Write([]byte(fmt.Sprintf("Internal error, please contact your administrator. Request ID %s", requestID)))
 }
 
-func (p *ProxyState) ValidateRequest(w http.ResponseWriter, req *http.Request, requestID string, token *jwt.Token) (*ProxyTenantState, error) {
+func (p *ProxyState) ValidateRequest(w http.ResponseWriter, req *http.Request, requestID string, token *jwt.Token) (tenant *ProxyTenantState, path string, err error) {
 	parts := strings.SplitN(strings.TrimPrefix(req.URL.Path, p.BasePath+"/"), "/", 3)
 	p.Log.Printf("Got request for %s (%v) for user %#v\n", req.URL.String(), parts, token)
 
@@ -344,7 +346,7 @@ func (p *ProxyState) ValidateRequest(w http.ResponseWriter, req *http.Request, r
 	// but this is here just in case to prevent panics
 	if len(parts) < 2 {
 		http.Redirect(w, req, p.HomeURL, http.StatusPermanentRedirect)
-		return nil, nil
+		return nil, "", nil
 	}
 
 	tenantID := parts[1]
@@ -352,17 +354,17 @@ func (p *ProxyState) ValidateRequest(w http.ResponseWriter, req *http.Request, r
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(fmt.Sprintf("No such tenant: %s", tenantID)))
-		return nil, nil
+		return nil, "", nil
 	}
 	authMsg, err := p.Authorize(req, tenant.ProxyMLFlowTenant, token)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	if len(authMsg) != 0 {
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte(authMsg))
-		return nil, nil
+		return nil, "", nil
 	}
 
 	// The only way this can happen is if we get a request to <base>/<tenants>/<id>,
@@ -371,15 +373,193 @@ func (p *ProxyState) ValidateRequest(w http.ResponseWriter, req *http.Request, r
 		pathOffset := strings.TrimPrefix(req.URL.Path, p.BaseURL.Path)
 		tenantHome := JoinPaths(p.BaseURL.String(), pathOffset) + "/"
 		http.Redirect(w, req, tenantHome, http.StatusPermanentRedirect)
-		return nil, nil
+		return nil, "", nil
 	}
 
+	return tenant, parts[2], nil
+}
+
+type readCloserWithErrorChan struct {
+	inner   io.ReadCloser
+	errChan chan error
+}
+
+var _ = io.Reader(readCloserWithErrorChan{})
+
+func (r readCloserWithErrorChan) Read(p []byte) (int, error) {
+	err, ok := <-r.errChan
+	if ok && err != nil {
+		return 0, err
+	}
+
+	return r.inner.Read(p)
+}
+
+func (r readCloserWithErrorChan) Close() error {
+	return r.inner.Close()
+}
+
+func mutateJSON(r io.ReadCloser, f func(map[string]interface{}) error) (io.ReadCloser, error) {
+	r2, w, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	errChan := make(chan error)
+
+	go func() {
+		v := make(map[string]interface{})
+		defer close(errChan)
+		defer w.Close()
+		defer func() {
+			r := recover()
+			if r == nil {
+				return
+			}
+			err, ok := r.(error)
+			if ok {
+				errChan <- err
+				return
+			}
+			errChan <- fmt.Errorf("%v", r)
+		}()
+		err := func() error {
+			var err error
+			err = json.NewDecoder(r).Decode(&v)
+			if err != nil {
+				return err
+			}
+			err = f(v)
+			if err != nil {
+				return err
+			}
+			err = json.NewEncoder(w).Encode(v)
+			if err != nil {
+				return err
+			}
+			return nil
+		}()
+		errChan <- err
+	}()
+
+	return readCloserWithErrorChan{
+		inner:   r2,
+		errChan: errChan,
+	}, nil
+}
+
+func setUserID(subject string) func(map[string]interface{}) error {
+	return func(body map[string]interface{}) error {
+		body["user_id"] = subject
+		return nil
+	}
+}
+
+func setUserTag(subject string) func(map[string]interface{}) error {
+	return func(body map[string]interface{}) error {
+		tags, ok := body["tags"].(map[string]interface{})
+		if !ok {
+			tags = make(map[string]interface{})
+			body["tags"] = tags
+		}
+		tags["mlflow.user"] = subject
+		return nil
+	}
+}
+
+func setUserValue(subject string) func(map[string]interface{}) error {
+	return func(body map[string]interface{}) error {
+		if body["key"] == "mlflow.user" {
+			body["value"] = subject
+		}
+		return nil
+	}
+}
+
+func peekUserValue(userChan chan string) func(map[string]interface{}) error {
+	return func(body map[string]interface{}) error {
+		defer close(userChan)
+		if body["key"] == "mlflow.user" {
+			userRaw, ok := body["value"]
+			var user string
+			if ok {
+				user = userRaw.(string)
+			}
+			userChan <- user
+		}
+		return nil
+	}
+}
+
+func (p *ProxyState) MutateRequest(w http.ResponseWriter, req *http.Request, path string, requestID string, token *jwt.Token) (rejectMsg string, err error) {
 	// The --static-prefix flag does not apply to the API, so we must manually trim it
-	if strings.HasPrefix(parts[2], "api/") {
-		req.URL.Path = parts[2]
+	if strings.HasPrefix(path, "api/") {
+		req.URL.Path = path
 	}
 
-	return tenant, nil
+	// TODO: Provide a template to do this
+	tokenSubjectRaw := token.Claims.(jwt.MapClaims)["sub"]
+	tokenSubject, ok := tokenSubjectRaw.(string)
+	if !ok {
+		panic(fmt.Sprintf("Token subject was not string: %#v", tokenSubjectRaw))
+	}
+
+	// Runs still have a deprecated non-tag field for the user id
+	if path == "api/2.0/mlflow/runs/create" {
+		req.Body, err = mutateJSON(req.Body, setUserID(tokenSubject))
+		if err != nil {
+			return "", err
+		}
+		req.ContentLength = -1
+	}
+
+	// Creating any taggable resource should set the user tag to the resolved username
+	if path == "api/2.0/mlflow/runs/create" ||
+		path == "api/2.0/mlflow/experiments/create" ||
+		path == "api/2.0/mlflow/registered-models/create" ||
+		path == "api/2.0/mlflow/model-versions/create" {
+
+		req.Body, err = mutateJSON(req.Body, setUserTag(tokenSubject))
+		if err != nil {
+			return "", err
+		}
+		req.ContentLength = -1
+	}
+
+	// If the user attempts to overwrite the user tag,
+	// we just overwrite the value in their request
+	if path == "api/2.0/mlflow/runs/set-tag" ||
+		path == "api/2.0/mlflow/experiments/set-experiment-tag" ||
+		path == "api/2.0/mlflow/registered-models/set-tag" ||
+		path == "api/2.0/mlflow/model-versions/set-tag" {
+
+		req.Body, err = mutateJSON(req.Body, setUserValue(tokenSubject))
+		if err != nil {
+			return "", err
+		}
+		req.ContentLength = -1
+	}
+
+	// Deleting the user tag is not allowed
+	if path == "api/2.0/mlflow/runs/delete-tag" ||
+		path == "api/2.0/mlflow/registered-models/delete-tag" ||
+		path == "api/2.0/mlflow/model-versions/delete-tag" {
+
+		userChan := make(chan string)
+
+		req.Body, err = mutateJSON(req.Body, peekUserValue(userChan))
+		if err != nil {
+			return "", err
+		}
+		req.ContentLength = -1
+
+		for user := range userChan {
+			if user != tokenSubject {
+				return "Deleting the mlflow.user tag is not permitted in multi-tenant mode", nil
+			}
+		}
+	}
+
+	return "", nil
 }
 
 func (p *ProxyState) GetAccessToken(r *http.Request) (string, bool) {
@@ -477,10 +657,19 @@ func (p *ProxyState) Home(w http.ResponseWriter, req *http.Request, requestID st
 }
 
 func (p *ProxyState) Proxy(w http.ResponseWriter, r *http.Request, requestID string, token *jwt.Token) {
-	tenant, err := p.ValidateRequest(w, r, requestID, token)
+	tenant, subPath, err := p.ValidateRequest(w, r, requestID, token)
 	if err != nil {
 		p.InternalError(w, r, requestID, "evaluating policy", err)
 		return
+	}
+	rejectMsg, err := p.MutateRequest(w, r, subPath, requestID, token)
+	if err != nil {
+		p.InternalError(w, r, requestID, "mutating request", err)
+		return
+	}
+	if rejectMsg != "" {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(rejectMsg))
 	}
 	p.Log.Printf("%s: Rewrote URL to %s\n", requestID, r.URL.String())
 

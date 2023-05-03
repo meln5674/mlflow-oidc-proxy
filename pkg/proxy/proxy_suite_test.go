@@ -64,7 +64,11 @@ func (r *RequestEcho) FromHTTP(r2 *http.Request) *RequestEcho {
 	r.ProtoMinor = r2.ProtoMinor
 	r.Header = r2.Header
 	if r2.Body != nil {
-		buf := bytes.NewBuffer(make([]byte, r2.ContentLength))
+		conLen := r2.ContentLength
+		if conLen < 0 {
+			conLen = 0
+		}
+		buf := bytes.NewBuffer(make([]byte, conLen))
 		io.Copy(buf, r2.Body)
 		r.Body = buf.Bytes()
 	}
