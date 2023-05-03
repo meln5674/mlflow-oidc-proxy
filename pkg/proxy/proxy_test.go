@@ -40,6 +40,21 @@ type proxySpecState struct {
 	claims    map[string]interface{}
 }
 
+func (p *proxySpecState) addRole(role string) {
+	realmAccess, ok := p.claims["realm_access"].(map[string]interface{})
+	if !ok {
+		realmAccess = make(map[string]interface{})
+		p.claims["realm_access"] = realmAccess
+	}
+	realmRoles, ok := realmAccess["roles"].([]interface{})
+	if !ok {
+		realmRoles = make([]interface{}, 0, 1)
+		realmAccess["roles"] = realmRoles
+	}
+	realmRoles = append(realmRoles, role)
+	realmAccess["roles"] = realmRoles
+}
+
 func (p *proxySpecState) expectCode(code int) {
 	GinkgoHelper()
 	Expect(p.rec.Code).To(Equal(code))
@@ -108,6 +123,8 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 
 	var s proxySpecState
 
+	tokenSubject := "test-user"
+
 	BeforeEach(func() {
 		s = proxySpecState{
 			externalURL: "https://some.external.url",
@@ -175,7 +192,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 				IssuedAt:  now.Unix(),
 				Issuer:    "test",
 				NotBefore: now.Unix(),
-				Subject:   "test-user",
+				Subject:   tokenSubject,
 			}
 			claimBytes, err := json.Marshal(&stdClaims)
 			Expect(err).ToNot(HaveOccurred())
@@ -214,11 +231,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 
 			When("there is one authorized tenant", func() {
 				BeforeEach(func() {
-					s.claims["realm_access"] = map[string]interface{}{
-						"roles": []interface{}{
-							"tenant-1",
-						},
-					}
+					s.addRole("tenant-1")
 				})
 				It("should return a table with that tenant's link", func() {
 					s.expectCode(http.StatusOK)
@@ -237,12 +250,8 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 			})
 			When("there are two authorized tenants", func() {
 				BeforeEach(func() {
-					s.claims["realm_access"] = map[string]interface{}{
-						"roles": []interface{}{
-							"tenant-1",
-							"tenant-2",
-						},
-					}
+					s.addRole("tenant-1")
+					s.addRole("tenant-2")
 				})
 				It("should return a table with both those tenants' links", func() {
 					s.expectCode(http.StatusOK)
@@ -302,11 +311,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 				s.addNoAccessTests()
 				When("the user is granted access", func() {
 					BeforeEach(func() {
-						s.claims["realm_access"] = map[string]interface{}{
-							"roles": []interface{}{
-								"tenant-1",
-							},
-						}
+						s.addRole("tenant-1")
 					})
 					It("should redirect to the tenant root", func() {
 						s.expectRedirect(http.StatusPermanentRedirect, s.externalURL+"/tenants/tenant-1/")
@@ -324,11 +329,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 				s.addNoAccessTests()
 				When("the user is granted access", func() {
 					BeforeEach(func() {
-						s.claims["realm_access"] = map[string]interface{}{
-							"roles": []interface{}{
-								"tenant-1",
-							},
-						}
+						s.addRole("tenant-1")
 					})
 					It("should return the upstream root", func() {
 						s.expectCode(http.StatusOK)
@@ -343,11 +344,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 		BeforeEach(func() {
 			s.method = "GET"
 			s.target = "/tenants/tenant-bad"
-			s.claims["realm_access"] = map[string]interface{}{
-				"roles": []interface{}{
-					"tenant-1",
-				},
-			}
+			s.addRole("tenant-1")
 		})
 		s.addBadTokenTests()
 		When("a valid token is present", func() {
@@ -366,11 +363,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 			s.addNoAccessTests()
 			When("the user is granted access", func() {
 				BeforeEach(func() {
-					s.claims["realm_access"] = map[string]interface{}{
-						"roles": []interface{}{
-							"tenant-1",
-						},
-					}
+					s.addRole("tenant-1")
 				})
 				It("should trim the static prefix from the URL", func() {
 					s.expectCode(http.StatusOK)
@@ -391,11 +384,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 			s.addNoAccessTests()
 			When("the user is granted access", func() {
 				BeforeEach(func() {
-					s.claims["realm_access"] = map[string]interface{}{
-						"roles": []interface{}{
-							"tenant-1",
-						},
-					}
+					s.addRole("tenant-1")
 				})
 				It("should trim the static prefix from the URL", func() {
 					s.expectCode(http.StatusOK)
@@ -425,6 +414,433 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 		})
 		It("should return success", func() {
 			s.expectCode(http.StatusOK)
+		})
+	})
+	When("an experiment is created", func() {
+		BeforeEach(func() {
+			s.method = "POST"
+			s.target = "/tenants/tenant-1/api/2.0/mlflow/experiments/create"
+		})
+		s.addBadTokenTests()
+		When("a valid token is present", func() {
+			s.addNoAccessTests()
+			When("the user is granted access", func() {
+				BeforeEach(func() {
+					s.addRole("tenant-1")
+				})
+
+				cases := map[string]string{
+					"the mlflow.user tag is not set": `{"name": "foo"}`,
+					"the mlflow.user tag is set":     `{"name": "foo", "tags": { "mlflow.user": " bogus-user" } }`,
+				}
+
+				for name, reqBody := range cases {
+
+					When(name, func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(reqBody))
+						})
+						It("should trim the static prefix from the URL, and add set the mlflow.user tag to the token subject", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/experiments/create"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("tags", HaveExactElements(HaveKeyWithValue("mlflow.user", tokenSubject))))
+						})
+					})
+				}
+			})
+		})
+	})
+	When("a run is created", func() {
+		BeforeEach(func() {
+			s.method = "POST"
+			s.target = "/tenants/tenant-1/api/2.0/mlflow/runs/create"
+		})
+		s.addBadTokenTests()
+		When("a valid token is present", func() {
+			s.addNoAccessTests()
+			When("the user is granted access", func() {
+				BeforeEach(func() {
+					s.addRole("tenant-1")
+				})
+				cases := map[string]string{
+					"neither the mlflow.user tag nor user_id not set": `{"experiment_id": "foo", "run_name": "bar", "start_time": 1000}`,
+					"just the mlflow.user tag is set but not user_id": `{"experiment_id": "foo", "run_name": "bar", "start_time": 1000, "tags": { "mlflow.user": "bogus-user" } }`,
+					"just user_id is set but not the mlflow.user tag": `{"experiment_id": "foo", "run_name": "bar", "start_time": 1000, "user_id": "bogus-user" }`,
+					"both the mlflow.user tag and user_id are set":    `{"experiment_id": "foo", "run_name": "bar", "start_time": 1000, "user_id": "bogus-user", "tags": { "mlflow.user": { "a-different-bogus-user" } } }`,
+				}
+				for name, reqBody := range cases {
+					When(name, func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(reqBody))
+						})
+						It("should trim the static prefix from the URL, and add set the mlflow.user tag and user_id field to the token subject", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/runs/create"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("tags", HaveExactElements(HaveKeyWithValue("mlflow.user", tokenSubject))))
+							Expect(body).To(HaveKeyWithValue("user_id", tokenSubject))
+						})
+					})
+				}
+			})
+		})
+	})
+	When("an experiment tag is updated", func() {
+		BeforeEach(func() {
+			s.method = "POST"
+			s.target = "/tenants/tenant-1/api/2.0/mlflow/experiments/set-experiment-tag"
+		})
+		s.addBadTokenTests()
+		When("a valid token is present", func() {
+			s.addNoAccessTests()
+			When("the user is granted access", func() {
+				BeforeEach(func() {
+					s.addRole("tenant-1")
+				})
+
+				When("the tag is not mlflow.user", func() {
+					BeforeEach(func() {
+						s.body = bytes.NewBuffer([]byte(`{ "experiment_id": "foo", "key": "bar", "value": "baz" }`))
+					})
+					It("should leave it alone", func() {
+						s.expectCode(http.StatusOK)
+						upstreamRequest := s.echoedRequest()
+						Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/experiments/set-experiment-tag"))
+						body := make(map[string]interface{})
+						Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+						Expect(body).To(HaveKeyWithValue("value", "baz"))
+					})
+				})
+				When("the tag is mlflow.user", func() {
+					BeforeEach(func() {
+						s.body = bytes.NewBuffer([]byte(`{ "experiment_id": "foo", "key": "mlflow.user", "value": "bogus-user" }`))
+					})
+					It("should overwrite it with the token subject", func() {
+						s.expectCode(http.StatusOK)
+						upstreamRequest := s.echoedRequest()
+						Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/experiments/set-experiment-tag"))
+						body := make(map[string]interface{})
+						Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+						Expect(body).To(HaveKeyWithValue("value", tokenSubject))
+					})
+				})
+			})
+		})
+		When("a run tag is updated", func() {
+			BeforeEach(func() {
+				s.method = "POST"
+				s.target = "/tenants/tenant-1/api/2.0/mlflow/runs/set-tag"
+			})
+			s.addBadTokenTests()
+			When("a valid token is present", func() {
+				s.addNoAccessTests()
+				When("the user is granted access", func() {
+					BeforeEach(func() {
+						s.addRole("tenant-1")
+					})
+
+					When("the tag is not mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "bar", "value": "baz" }`))
+						})
+						It("should leave it alone", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/runs/set-tag"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("value", "baz"))
+						})
+					})
+					When("the tag is mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "mlflow.user", "value": "bogus-user" }`))
+						})
+						It("overwrite it with the token subject", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/runs/set-tag"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("value", tokenSubject))
+						})
+					})
+				})
+			})
+		})
+		When("a run tag is deleted", func() {
+			BeforeEach(func() {
+				s.method = "POST"
+				s.target = "/tenants/tenant-1/api/2.0/mlflow/runs/delete-tag"
+			})
+			s.addBadTokenTests()
+			When("a valid token is present", func() {
+				s.addNoAccessTests()
+				When("the user is granted access", func() {
+					BeforeEach(func() {
+						s.addRole("tenant-1")
+					})
+
+					When("the tag is not mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "bar" }`))
+						})
+						It("should allow it", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/runs/delete-tag"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("key", "bar"))
+						})
+					})
+					When("the tag is mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "mlflow.user" }`))
+						})
+						It("should forbid it", func() {
+							s.expectCode(http.StatusForbidden)
+						})
+					})
+				})
+			})
+		})
+		When("a model is registered", func() {
+			BeforeEach(func() {
+				s.method = "POST"
+				s.target = "/tenants/tenant-1/api/2.0/mlflow/registered-models/create"
+			})
+			s.addBadTokenTests()
+			When("a valid token is present", func() {
+				s.addNoAccessTests()
+				When("the user is granted access", func() {
+					BeforeEach(func() {
+						s.addRole("tenant-1")
+					})
+
+					cases := map[string]string{
+						"the mlflow.user tag is not set": `{"name": "foo"}`,
+						"the mlflow.user tag is set":     `{"name": "foo", "tags": { "mlflow.user": " bogus-user" } }`,
+					}
+
+					for name, reqBody := range cases {
+
+						When(name, func() {
+							BeforeEach(func() {
+								s.body = bytes.NewBuffer([]byte(reqBody))
+							})
+							It("should trim the static prefix from the URL, and add set the mlflow.user tag to the token subject", func() {
+								s.expectCode(http.StatusOK)
+								upstreamRequest := s.echoedRequest()
+								Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/registered-models/create"))
+								body := make(map[string]interface{})
+								Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+								Expect(body).To(HaveKeyWithValue("tags", HaveExactElements(HaveKeyWithValue("mlflow.user", tokenSubject))))
+							})
+						})
+					}
+				})
+			})
+		})
+		When("a registered model tag is updated", func() {
+			BeforeEach(func() {
+				s.method = "POST"
+				s.target = "/tenants/tenant-1/api/2.0/mlflow/registered-models/set-tag"
+			})
+			s.addBadTokenTests()
+			When("a valid token is present", func() {
+				s.addNoAccessTests()
+				When("the user is granted access", func() {
+					BeforeEach(func() {
+						s.addRole("tenant-1")
+					})
+
+					When("the tag is not mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "bar", "value": "baz" }`))
+						})
+						It("should leave it alone", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/registered-models/set-tag"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("value", "baz"))
+						})
+					})
+					When("the tag is mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "mlflow.user", "value": "bogus-user" }`))
+						})
+						It("overwrite it with the token subject", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/registered-models/set-tag"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("value", tokenSubject))
+						})
+					})
+				})
+			})
+		})
+		When("a registered model tag is deleted", func() {
+			BeforeEach(func() {
+				s.method = "POST"
+				s.target = "/tenants/tenant-1/api/2.0/mlflow/registered-models/delete-tag"
+			})
+			s.addBadTokenTests()
+			When("a valid token is present", func() {
+				s.addNoAccessTests()
+				When("the user is granted access", func() {
+					BeforeEach(func() {
+						s.addRole("tenant-1")
+					})
+
+					When("the tag is not mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "bar" }`))
+						})
+						It("should allow it", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/registered-models/delete-tag"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("key", "bar"))
+						})
+					})
+					When("the tag is mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "mlflow.user" }`))
+						})
+						It("should forbid it", func() {
+							s.expectCode(http.StatusForbidden)
+						})
+					})
+				})
+			})
+		})
+		When("a model version is created", func() {
+			BeforeEach(func() {
+				s.method = "POST"
+				s.target = "/tenants/tenant-1/api/2.0/mlflow/model-versions/create"
+			})
+			s.addBadTokenTests()
+			When("a valid token is present", func() {
+				s.addNoAccessTests()
+				When("the user is granted access", func() {
+					BeforeEach(func() {
+						s.addRole("tenant-1")
+					})
+
+					cases := map[string]string{
+						"the mlflow.user tag is not set": `{"name": "foo"}`,
+						"the mlflow.user tag is set":     `{"name": "foo", "tags": { "mlflow.user": " bogus-user" } }`,
+					}
+
+					for name, reqBody := range cases {
+
+						When(name, func() {
+							BeforeEach(func() {
+								s.body = bytes.NewBuffer([]byte(reqBody))
+							})
+							It("should trim the static prefix from the URL, and add set the mlflow.user tag to the token subject", func() {
+								s.expectCode(http.StatusOK)
+								upstreamRequest := s.echoedRequest()
+								Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/model-versions/create"))
+								body := make(map[string]interface{})
+								Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+								Expect(body).To(HaveKeyWithValue("tags", HaveExactElements(HaveKeyWithValue("mlflow.user", tokenSubject))))
+							})
+						})
+					}
+				})
+			})
+		})
+		When("a model version tag is updated", func() {
+			BeforeEach(func() {
+				s.method = "POST"
+				s.target = "/tenants/tenant-1/api/2.0/mlflow/model-versions/set-tag"
+			})
+			s.addBadTokenTests()
+			When("a valid token is present", func() {
+				s.addNoAccessTests()
+				When("the user is granted access", func() {
+					BeforeEach(func() {
+						s.addRole("tenant-1")
+					})
+
+					When("the tag is not mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "bar", "value": "baz" }`))
+						})
+						It("should leave it alone", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/model-versions/set-tag"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("value", "baz"))
+						})
+					})
+					When("the tag is mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "mlflow.user", "value": "bogus-user" }`))
+						})
+						It("overwrite it with the token subject", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/model-versions/set-tag"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("value", tokenSubject))
+						})
+					})
+				})
+			})
+		})
+		When("a model version tag is deleted", func() {
+			BeforeEach(func() {
+				s.method = "POST"
+				s.target = "/tenants/tenant-1/api/2.0/mlflow/model-versions/delete-tag"
+			})
+			s.addBadTokenTests()
+			When("a valid token is present", func() {
+				s.addNoAccessTests()
+				When("the user is granted access", func() {
+					BeforeEach(func() {
+						s.addRole("tenant-1")
+					})
+
+					When("the tag is not mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "bar" }`))
+						})
+						It("should allow it", func() {
+							s.expectCode(http.StatusOK)
+							upstreamRequest := s.echoedRequest()
+							Expect(upstreamRequest.URL.Path).To(Equal("/api/2.0/mlflow/model-versions/delete-tag"))
+							body := make(map[string]interface{})
+							Expect(json.Unmarshal(upstreamRequest.Body, &body)).To(Succeed())
+							Expect(body).To(HaveKeyWithValue("key", "bar"))
+						})
+					})
+					When("the tag is mlflow.user", func() {
+						BeforeEach(func() {
+							s.body = bytes.NewBuffer([]byte(`{ "run_id": "foo", "key": "mlflow.user" }`))
+						})
+						It("should forbid it", func() {
+							s.expectCode(http.StatusForbidden)
+						})
+					})
+				})
+			})
 		})
 	})
 })
