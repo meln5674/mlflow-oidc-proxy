@@ -1,0 +1,22 @@
+{{- if and .Values.minio.enabled .Values.minioJob.enabled .Values.minioJob.rbac.create }}
+{{- $dot := . }}
+{{- $oauth2Proxy := index .Values "oauth2-proxy" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "mlflow-multitenant.minioJob.fullname" . }}
+  labels:
+    {{- include "mlflow-multitenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: configure-minio
+rules:
+- apiGroups: ['']
+  resources: [secrets]
+  verbs: [create]
+- apiGroups: ['']
+  resources: [secrets]
+  verbs: [get,patch,update]
+  resourceNames:
+  {{- range .Values.mlflow.tenants }}
+  - {{ tpl $dot.Values.minioJob.secretNameTemplate (set (deepCopy $dot) "Tenant" .) }}
+  {{- end }}
+{{- end }}

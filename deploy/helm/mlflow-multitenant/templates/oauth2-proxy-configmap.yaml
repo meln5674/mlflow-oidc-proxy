@@ -1,0 +1,13 @@
+{{- $oauth2Proxy := index .Values "oauth2-proxy" }}
+{{- if $oauth2Proxy.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $oauth2Proxy.configuration.existingConfigmap }}
+  labels:
+    {{- include "mlflow-multitenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: oauth2-proxy
+data:
+  oauth2_proxy.cfg: |
+    {{- tpl $oauth2Proxy.configuration.content . | nindent 4 }}
+{{- end }}

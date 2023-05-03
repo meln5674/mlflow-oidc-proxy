@@ -1,0 +1,5 @@
+mlflow:
+  tenants:
+  - name: tenant-1
+  - name: tenant-2
+    description: A description

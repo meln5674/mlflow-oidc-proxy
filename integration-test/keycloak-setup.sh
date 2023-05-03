@@ -1,4 +1,6 @@
 rm -f /tmp/trust.jks
+
+
 keytool -import \
     -keystore /tmp/trust.jks \
     -storepass truststore-password \
@@ -7,14 +9,18 @@ keytool -import \
 kcadm.sh config truststore \
     --trustpass truststore-password /tmp/trust.jks
 kcadm.sh config credentials \
-    --server https://keycloak.default.svc.cluster.local/ \
+    --server "${KEYCLOAK_URL}" \
     --realm master \
     --user admin \
     --password adminPassword \
     --client admin-cli
-if ! kcadm.sh get realms -F realm | grep -q '"integration-test"'; then
-    kcadm.sh create realms -s realm=integration-test -s enabled=true 
+
+if [ -z "${USERS_ONLY}" ]; then
+
+if ! kcadm.sh get realms -F realm | grep -q '"'"${REALM}"'"'; then
+    kcadm.sh create realms -s realm="${REALM}" -s enabled=true 
 fi
+
 
 while read -r client_id callback ; do
     if stat "/tmp/client-secrets/${client_id}" ; then
@@ -23,7 +29,7 @@ while read -r client_id callback ; do
     
     mkdir -p /tmp/client-secrets
     if ! kcadm.sh get clients \
-            -r integration-test \
+            -r "${REALM}" \
             -q clientId="${client_id}" \
             -F clientId \
             | tee /dev/stderr \
@@ -31,18 +37,18 @@ while read -r client_id callback ; do
             ; then
         client_uid=$(
             kcadm.sh create clients \
-                -r integration-test \
+                -r "${REALM}" \
                 -s clientId="${client_id}" \
                 -s clientAuthenticatorType=client-secret \
                 -s "redirectUris=[\"https://${client_id}.mlflow-oidc-proxy-it.cluster/${callback}\"]"  \
                 -i
         )
         kcadm.sh create clients/${client_uid}/client-secret \
-            -r integration-test
+            -r "${REALM}"
     else
         client_uid=$(
             kcadm.sh get clients \
-                -r integration-test \
+                -r "${REALM}" \
                 -q clientId="${client_id}" \
                 -F id \
                 | tee /dev/stderr \
@@ -52,7 +58,7 @@ while read -r client_id callback ; do
         )
     fi
     kcadm.sh get clients/${client_uid}/client-secret \
-        -r integration-test \
+        -r "${REALM}" \
         -F value \
         | tee /dev/stderr \
         | grep '"value"' \
@@ -64,18 +70,20 @@ jupyterhub hub/oauth_callback
 mlflow oauth2/callback
 EOF
 
+fi
+
 for tenant in 1 2; do
     if ! kcadm.sh get "roles/tenant-${tenant}" \
-            -r integration-test \
+            -r "${REALM}" \
             -F name \
             ; then
         kcadm.sh create roles \
-            -r integration-test \
+            -r "${REALM}" \
             -s name="tenant-${tenant}" \
             -i
     fi
     if ! kcadm.sh get users \
-            -r integration-test \
+            -r "${REALM}" \
             -q username="tenant-${tenant}" \
             -F username \
             | tee /dev/stderr \
@@ -83,7 +91,7 @@ for tenant in 1 2; do
             ; then
         user_id=$(
             kcadm.sh create users \
-                -r integration-test \
+                -r "${REALM}" \
                 -s username="tenant-${tenant}" \
                 -s email="tenant-${tenant}@test.test" \
                 -s emailVerified=true \
@@ -93,7 +101,7 @@ for tenant in 1 2; do
     else
         user_id=$(
             kcadm.sh get users \
-                -r integration-test \
+                -r "${REALM}" \
                 -q username=test \
                 -F id \
                 | tee /dev/stderr \
@@ -104,7 +112,7 @@ for tenant in 1 2; do
     fi
 
     kcadm.sh add-roles \
-        -r integration-test \
+        -r "${REALM}" \
         --rolename "tenant-${tenant}" \
         --uusername "tenant-${tenant}"
 done

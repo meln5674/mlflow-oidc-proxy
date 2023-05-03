@@ -1,0 +1,18 @@
+{{- if and .Values.keycloak.enabled .Values.keycloakJob.enabled .Values.keycloakJob.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "mlflow-multitenant.keycloakJob.fullname" . }}
+  labels:
+    {{- include "mlflow-multitenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: configure-keycloak
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "mlflow-multitenant.keycloakJob.fullname" . }}
+subjects:
+- apiGroup: ''
+  kind: ServiceAccount
+  name: {{ include "mlflow-multitenant.keycloakJob.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}

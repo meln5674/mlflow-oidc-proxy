@@ -1,0 +1,126 @@
+{{- $dot := . }}
+
+{{- $keycloakDot := .Subcharts.keycloak }}
+{{- $keycloakDot = set $keycloakDot "Template" .Template }}
+{{- $keycloakDot = set $keycloakDot "Values" .Values.keycloak }}
+
+{{- if .Values.certManagerCerts.enabled }}
+{{- if not .Values.certManagerCerts.existingIssuer.name }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" . }}-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" . }}-ca
+spec:
+  isCA: true
+  commonName: {{ include "mlflow-multitenant.fullname" . }}-ca
+  secretName: {{ include "mlflow-multitenant.fullname" . }}-ca
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: {{ include "mlflow-multitenant.fullname" . }}-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" . }}-ca
+spec:
+  ca:
+    secretName: {{ include "mlflow-multitenant.fullname" . }}-ca
+---
+{{- end }}
+
+{{- if and .Values.keycloak.enabled .Values.keycloak.ingress.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" . }}-keycloak
+spec:
+  commonName: {{ .Values.keycloak.ingress.hostname }}
+  secretName: {{ .Values.keycloak.tls.existingSecret }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    {{- if not .Values.certManagerCerts.existingIssuer.name }}
+    name: {{ include "mlflow-multitenant.fullname" . }}-ca
+    kind: Issuer
+    {{- else }}
+    name: {{ .Values.certManagerCerts.existingIssuer.name }}
+    kind: {{ .Values.certManagerCerts.existingIssuer.kind }}
+    {{- end }}
+    group: cert-manager.io
+  dnsNames:
+  - {{ .Values.keycloak.ingress.hostname }}
+  {{- with .Values.keycloak.ingress.extraHosts }}
+  {{- . | toYaml | nindent 2 }}
+  {{- end }}
+  - {{ include "common.names.fullname" $keycloakDot }}.{{ .Release.Namespace }}.svc.cluster.local
+---
+{{- end }}
+
+{{- $oauth2Proxy := index .Values "oauth2-proxy" }}
+{{- if and $oauth2Proxy.enabled $oauth2Proxy.ingress.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" . }}-oauth2-proxy
+spec:
+  commonName: {{ $oauth2Proxy.ingress.hostname }}
+  secretName: {{ $oauth2Proxy.ingress.existingSecretName }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    {{- if not .Values.certManagerCerts.existingIssuer.name }}
+    name: {{ include "mlflow-multitenant.fullname" . }}-ca
+    kind: Issuer
+    {{- else }}
+    name: {{ .Values.certManagerCerts.existingIssuer.name }}
+    kind: {{ .Values.certManagerCerts.existingIssuer.kind }}
+    {{- end }}
+    group: cert-manager.io
+  dnsNames:
+  - {{ $oauth2Proxy.ingress.hostname }}
+  {{- with $oauth2Proxy.ingress.extraHosts }}
+  {{- . | toYaml | nindent 2 }}
+  {{- end }}
+---
+{{- end }}
+
+
+{{- if and .Values.postgres.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" . }}-postgres
+spec:
+  commonName: {{ include "mlflow-multitenant.fullname" . }}-postgres.{{ .Release.Namespace }}.svc.cluster.local
+  secretName: {{ include "mlflow-multitenant.fullname" . }}-postgres-tls
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    {{- if not .Values.certManagerCerts.existingIssuer.name }}
+    name: {{ include "mlflow-multitenant.fullname" . }}-ca
+    kind: Issuer
+    {{- else }}
+    name: {{ .Values.certManagerCerts.existingIssuer.name }}
+    kind: {{ .Values.certManagerCerts.existingIssuer.kind }}
+    {{- end }}
+    group: cert-manager.io
+---
+{{- end }}
+
+
+
+{{- end }}

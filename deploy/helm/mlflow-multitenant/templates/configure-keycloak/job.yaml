@@ -1,0 +1,120 @@
+{{- if and .Values.keycloak.enabled .Values.keycloakJob.enabled }}
+{{- $keycloakDot := deepCopy . }}
+{{- $keycloakDot = set $keycloakDot "Chart" .Subcharts.keycloak.Chart }}
+{{- $keycloakDot = set $keycloakDot "Values" .Values.keycloak }}
+{{- $oauth2Proxy := index .Values "oauth2-proxy" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mlflow-multitenant.keycloakJob.fullname" . }}-{{ .Release.Revision }}
+  labels:
+    {{- include "mlflow-multitenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: configure-keycloak
+  {{- with .Values.keycloakJob.annotations }}
+  annotations:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "mlflow-multitenant.keycloakJob.serviceAccountName" . }}
+      initContainers:
+      - name: kubectl-get
+        image: {{ .Values.keycloakJob.kubectl.image.registry }}/{{ .Values.keycloakJob.kubectl.image.repository }}:{{ .Values.keycloakJob.kubectl.image.tag | default .Capabilities.KubeVersion.Version | trimPrefix "v" }}
+        env:
+        - name: SECRET_NAME
+          value: {{ $oauth2Proxy.configuration.existingSecret }}
+        {{- with .Values.keycloakJob.extraClients }}
+        - name: EXTRA_CLIENTS
+          value: |-
+            {{- range . }}
+            {{ .id }} {{ .secretName }}
+            {{- end }}
+        {{- end }}
+        command: [bash, -xeuc]
+        args:
+        - |
+          {{- .Files.Get "files/scripts/get-oidc-secret.sh" | nindent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          subPath: tmp
+      - name: config
+        image: {{ .Values.keycloak.image.registry }}/{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag | default .Subcharts.keycloak.Chart.AppVersion }}
+        env:
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "keycloak.secretName" $keycloakDot }}
+              key: {{ include "keycloak.secretKey" $keycloakDot }}
+        - name: KEYCLOAK_URL
+          value: https://{{ include "common.names.fullname" $keycloakDot }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.keycloak.service.ports.https }}
+        - name: MLFLOW_CALLBACK_URL
+          value: https://{{ (index .Values "oauth2-proxy").ingress.hostname }}/oauth2/callback
+        - name: MLFLOW_CLIENT_ID
+          value: {{ .Values.keycloakJob.clientID }}
+        - name: MLFLOW_REALM
+          value: {{ .Values.keycloakJob.realm }}
+        {{- if .Values.keycloakJob.createTenantRoles }}
+        - name: CREATE_ROLES
+          value: >-
+            {{- range .Values.mlflow.tenants }}
+            {{ .id }}
+            {{- end }}
+        {{- end }}
+        {{- with .Values.keycloakJob.extraClients }}
+        - name: EXTRA_CLIENTS
+          value: |-
+            {{- range . }}
+            {{ .id }} {{ .callbackURL }}
+            {{- end }}
+        {{- end }}
+        command: [bash, -xeuc]
+        args:
+        - |
+          {{- .Files.Get "files/scripts/configure-keycloak.sh" | nindent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          subPath: tmp
+        - name: tmp
+          mountPath: /home/keycloak
+          subPath: home/keycloak
+        {{- if .Values.keycloak.tls.enabled }}
+        - name: certificates
+          mountPath: /opt/bitnami/keycloak/certs
+          readOnly: true
+        {{- end }}
+      containers:
+      - name: kubectl-patch
+        image: {{ .Values.keycloakJob.kubectl.image.registry }}/{{ .Values.keycloakJob.kubectl.image.repository }}:{{ .Values.keycloakJob.kubectl.image.tag | default .Capabilities.KubeVersion.Version | trimPrefix "v" }}
+        env:
+        - name: SECRET_NAME
+          value: {{ $oauth2Proxy.configuration.existingSecret }}
+        {{- with .Values.keycloakJob.extraClients }}
+        - name: EXTRA_CLIENTS
+          value: |-
+            {{- range . }}
+            {{ .id }} {{ .secretName }}
+            {{- end }}
+        {{- end }}
+        command: [bash, -xeuc]
+        args:
+        - |
+          {{- .Files.Get "files/scripts/put-oidc-secret.sh" | nindent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          subPath: tmp
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      {{- if .Values.keycloak.tls.enabled }}
+      - name: certificates
+        secret:
+          secretName: {{ include "keycloak.tlsSecretName" $keycloakDot }}
+          defaultMode: 420
+      {{- end }}
+{{- end }}

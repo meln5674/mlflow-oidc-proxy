@@ -1,0 +1,136 @@
+{{- $dot := . }}
+{{- range $tenant := .Values.mlflow.tenants }}
+{{- with (include "mlflow-multitenant.tenantValues" (list $dot $tenant)) | fromYaml | set (deepCopy $dot) "Values" }}
+{{- with .Values.Error }}
+{{ fail . }}
+{{- end }}
+{{- $tplArg := set (deepCopy $dot) "Tenant" (set (deepCopy $tenant) "Values" .Values) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mlflow-multitenant.tenant.fullname" (list . $tenant) }}
+  labels:
+    {{- include "mlflow-multitenant.tenant.labels" (list . $tenant) | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mlflow-multitenant.tenant.selectorLabels" (list . $tenant) | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "mlflow-multitenant.tenant.selectorLabels" (list . $tenant) | nindent 8 }}
+        mlflow/config-hash: '{{ include "mlflow.configMapData" $tplArg | adler32sum }}'
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "mlflow-multitenant.serviceAccountName" $dot }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: DATABASE_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ tpl $dot.Values.mlflow.database.credentials.existingSecret.nameTemplate $tplArg }}
+                key: {{ $dot.Values.mlflow.database.credentials.existingSecret.usernameKey }}
+          - name: DATABASE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ tpl $dot.Values.mlflow.database.credentials.existingSecret.nameTemplate $tplArg }}
+                key: {{ $dot.Values.mlflow.database.credentials.existingSecret.passwordKey }}
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ tpl $dot.Values.mlflow.objectStore.credentials.existingSecret.nameTemplate $tplArg }}
+                key: {{ $dot.Values.mlflow.objectStore.credentials.existingSecret.accessKeyKey }}
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ tpl $dot.Values.mlflow.objectStore.credentials.existingSecret.nameTemplate $tplArg }}
+                key: {{ $dot.Values.mlflow.objectStore.credentials.existingSecret.secretKeyKey }}
+          {{- if $dot.Values.minio.enabled }}
+          - name: MLFLOW_S3_ENDPOINT_URL
+            value: http://{{ include "mlflow-multitenant.fullname" $dot }}-minio:9000 {{/* TODO: Template this out based on other info */}}
+          {{- end }}
+          {{- with .Values.extraEnv }}
+          {{- . | toYaml | nindent 10 }}
+          {{- end }}
+          command: [/usr/bin/docker-entrypoint.sh]
+          {{- $externalURL := (index .Values "mlflow-oidc-proxy").config.yaml.http.externalURL | default "http://localhost" }}
+          {{- $externalURLPath := ($externalURL | trimPrefix "http://" | trimPrefix "https://" | splitn "/" 2)._1 | trimSuffix "/" }}
+          {{- $tenantsPath := (index $dot.Values "mlflow-oidc-proxy").config.yaml.http.tenantPath | default "/tenants" | trimPrefix "/" | trimSuffix "/" }}
+          {{- $staticPrefixParts := list $tenantsPath $tenant.id }}
+          {{- if $externalURLPath }}
+          {{- $staticPrefixParts = prepend $staticPrefixParts $externalURLPath }}
+          {{- end }}
+          {{ $staticPrefix := print "/" (join "/" $staticPrefixParts) }}
+          args:
+          - --static-prefix={{ $staticPrefix }}
+          - --backend-store-uri={{ tpl $.Values.mlflow.database.uriTemplate $tplArg }}
+          - --serve-artifacts
+          - --artifacts-destination={{ tpl $.Values.mlflow.objectStore.uriTemplate $tplArg }}
+          - --default-artifact-root=mlflow-artifacts:/
+          {{- with .Values.extraArgs }}
+          {{- . | toYaml | nindent 10 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ $staticPrefix }}
+              port: http
+          readinessProbe:
+            httpGet:
+              path: {{ $staticPrefix }}
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          - name: scripts
+            mountPath: /usr/bin/docker-entrypoint.sh
+            subPath: docker-entrypoint.sh
+          - name: scripts
+            mountPath: /var/run/requirements.txt
+            subPath: requirements.txt
+          {{- with .Values.volumeMounts }}
+          {{- . | toYaml | nindent 10 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: scripts
+        configMap:
+          name: {{ include "mlflow-multitenant.tenant.fullname" (list . $tenant) }}
+          defaultMode: 0555
+      {{- with .Values.volumes }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
+---
+{{- end }}
+{{- end }}

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: mlflow-multitenant-deps
+description: >- 
+  Dependency charts for mlflow-multitenant.
+  These charts provide the required operators for the mlflow-multitenant chart, and are
+  collected here for conveninence.
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+dependencies:
+- name: cert-manager
+  repository: https://charts.jetstack.io
+  version: v1.11.1
+  condition: cert-manager.enabled
+- name: postgres-operator
+  repository: https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+  version: 1.10.0
+  condition: postgres-operator.enabled

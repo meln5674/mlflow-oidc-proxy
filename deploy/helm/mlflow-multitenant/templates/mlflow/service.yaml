@@ -1,0 +1,25 @@
+{{- $dot := . }}
+{{- range $tenant := .Values.mlflow.tenants }}
+{{- with (include "mlflow-multitenant.tenantValues" (list $dot $tenant)) | fromYaml | set (deepCopy $dot) "Values" }}
+{{- with .Values.Error }}
+{{ fail . }}
+{{- end }}
+{{- $tplArg := set (deepCopy $dot) "Tenant" (set (deepCopy $tenant) "Values" .Values) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mlflow-multitenant.tenant.fullname" (list . $tenant) }}
+  labels:
+    {{- include "mlflow-multitenant.tenant.labels" (list . $tenant) | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "mlflow-multitenant.tenant.selectorLabels" (list . $tenant) | nindent 4 }}
+---
+{{- end }}
+{{- end }}

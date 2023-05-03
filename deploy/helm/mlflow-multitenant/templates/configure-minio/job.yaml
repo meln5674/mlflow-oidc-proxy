@@ -1,0 +1,93 @@
+{{- if and .Values.minio.enabled .Values.minioJob.enabled }}
+{{- $dot := . }}
+{{- $minioDot := deepCopy . }}
+{{- $minioDot = set $minioDot "Chart" .Subcharts.minio.Chart }}
+{{- $minioDot = set $minioDot "Values" .Values.minio }}
+{{- $oauth2Proxy := index .Values "oauth2-proxy" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mlflow-multitenant.minioJob.fullname" . }}-{{ .Release.Revision }}
+  labels:
+    {{- include "mlflow-multitenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: configure-minio
+  {{- with .Values.minioJob.annotations }}
+  annotations:
+    {{- . | toYaml | nindent 4 }}
+  {{- end }}
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "mlflow-multitenant.minioJob.serviceAccountName" . }}
+      initContainers:
+      - name: kubectl-get
+        image: {{ .Values.minioJob.kubectl.image.registry }}/{{ .Values.minioJob.kubectl.image.repository }}:{{ .Values.minioJob.kubectl.image.tag | default .Capabilities.KubeVersion.Version | trimPrefix "v" }}
+        env:
+        - name: USER_SECRETS
+          value: |-
+            {{- range .Values.mlflow.tenants }}
+            {{ .id }} {{ tpl $dot.Values.minioJob.secretNameTemplate (set (deepCopy $dot) "Tenant" .) }}
+            {{- end }}
+        command: [bash, -xeuc]
+        args:
+        - |
+          {{- .Files.Get "files/scripts/get-minio-secret.sh" | nindent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          subPath: tmp
+      - name: config
+        image: {{ .Values.minio.mcImage.repository }}:{{ .Values.minio.mcImage.tag }}
+        env:
+        - name: MINIO_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "minio.secretName" $minioDot }}
+              key: rootUser
+        - name: MINIO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ template "minio.secretName" $minioDot }}
+              key: rootPassword
+  
+        - name: MINIO_URL
+          value: http://{{ include "minio.fullname" $minioDot }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.minio.service.port }}
+        - name: USER_BUCKETS
+          value: |-
+            {{- range .Values.mlflow.tenants }}
+            {{ .id }} {{ tpl $dot.Values.minioJob.accessKeyTemplate (set (deepCopy $dot) "Tenant" .) }}  {{ tpl $dot.Values.minioJob.bucketTemplate (set (deepCopy $dot) "Tenant" .) }} 
+            {{- end }}
+        command: [bash, -xeuc]
+        args:
+        - |
+          {{- .Files.Get "files/scripts/configure-minio.sh" | nindent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          subPath: tmp
+        - name: tmp
+          mountPath: /home/minio
+          subPath: home/minio
+      containers:
+      - name: kubectl-patch
+        image: {{ .Values.minioJob.kubectl.image.registry }}/{{ .Values.minioJob.kubectl.image.repository }}:{{ .Values.minioJob.kubectl.image.tag | default .Capabilities.KubeVersion.Version | trimPrefix "v" }}
+        env:
+        - name: USER_SECRETS
+          value: |-
+            {{- range .Values.mlflow.tenants }}
+            {{ .id }} {{ tpl $dot.Values.minioJob.secretNameTemplate (set (deepCopy $dot) "Tenant" .) }}
+            {{- end }}
+        command: [bash, -xeuc]
+        args:
+        - |
+          {{- .Files.Get "files/scripts/put-minio-secret.sh" | nindent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          subPath: tmp
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+{{- end }}

@@ -1,5 +1,12 @@
+{{- $dot := . }}
+{{- range $tenant := .Values.mlflow.tenants }}
+{{- with (include "mlflow-multitenant.tenantValues" (list $dot $tenant)) | fromYaml | set (deepCopy $dot) "Values" }}
+{{- with .Values.Error }}
+{{ fail . }}
+{{- end }}
 {{- if .Values.ingress.enabled -}}
-{{- $fullName := include "mlflow-oidc-proxy.fullname" . -}}
+{{- $tplArg := set (deepCopy $dot) "Tenant" (set (deepCopy $tenant) "Values" .Values) }}
+{{- $fullName := include "mlflow-multitenant.fullname" (list . $tenant) -}}
 {{- $svcPort := .Values.service.port -}}
 {{- if and .Values.ingress.className (not (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion)) }}
   {{- if not (hasKey .Values.ingress.annotations "kubernetes.io/ingress.class") }}
@@ -17,7 +24,7 @@ kind: Ingress
 metadata:
   name: {{ $fullName }}
   labels:
-    {{- include "mlflow-oidc-proxy.labels" . | nindent 4 }}
+    {{- include "mlflow-multitenant.tenant.labels" (list . $tenant) | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -26,22 +33,23 @@ spec:
   {{- if and .Values.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
   ingressClassName: {{ .Values.ingress.className }}
   {{- end }}
-  {{- if or .Values.ingress.tls.secret .Values.ingress.extraTLS }}
+  {{- if .Values.ingress.tls }}
   tls:
-    {{- if .Values.ingress.tls.secret }}
+    {{- range .Values.ingress.tls }}
     - hosts:
-      - host: {{ .Values.ingress.hostname }}
-      secretName: {{ .Values.ingress.tls.secret }}
-    {{- end }}
-    {{- with .Values.ingress.extraTLS }}
-    {{- . | toYaml | nindent 4 }}
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
     {{- end }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.hostname }}
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
       http:
         paths:
-          - path: /
+          {{- range .paths }}
+          - path: {{ .path }}
             {{- if and .pathType (semverCompare ">=1.18-0" $.Capabilities.KubeVersion.GitVersion) }}
             pathType: {{ .pathType }}
             {{- end }}
@@ -55,4 +63,9 @@ spec:
               serviceName: {{ $fullName }}
               servicePort: {{ $svcPort }}
               {{- end }}
+          {{- end }}
+    {{- end }}
+---
+{{- end }}
+{{- end }}
 {{- end }}
