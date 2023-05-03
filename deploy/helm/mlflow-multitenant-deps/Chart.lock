@@ -1,0 +1,9 @@
+dependencies:
+- name: cert-manager
+  repository: https://charts.jetstack.io
+  version: v1.11.1
+- name: postgres-operator
+  repository: https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+  version: 1.10.0
+digest: sha256:57a1fd69d00c5757998da0d56115bf6aa03db787b9f77c46b57f3a5e158de375
+generated: "2023-04-30T18:15:15.796266212-06:00"

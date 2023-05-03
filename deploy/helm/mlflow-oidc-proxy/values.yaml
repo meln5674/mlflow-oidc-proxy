@@ -46,15 +46,11 @@ ingress:
   annotations: {}
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
-  hosts:
-    - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
-  tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
+  hostname: chart-example.local
+  extraRules: []
+  tls:
+    secretName: ''
+  extraTLS: []
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -82,57 +78,50 @@ tolerations: []
 affinity: {}
 
 config:
-  # Reference to configmap containing config file
   existingConfigMap:
-    name:
-    key: mlflow-oidc-proxy.cfg
-  # Embedded mlflow-oidc-proxy.cfg
+    name: ''
   yaml:
     http:
-      # Listen on port 8080, all available interfaces
+      # Address and port to listen on
       address: 0.0.0.0:8080
-      # tokenEndpoint:
-      #  path: /token
+      # The external URL this server is accessible to users at
+      # externalURL: http[s]://<external hostname>[:<port>][/<path>]
+      # Path to serve tenants at.
+      # This assumes all tenants (see below) have --static-prefix=<externalURL path>/<this path>/<tenant id>
+      # This is concatenated with any path from externalURL (see above) when issuing static links
+      # tenantsPath: /tenants/
+    # TLS configuration
+    tls: {}
+      # Set to true to serve using TLS (HTTPS)
+      # enabled: false
+      # Path to your TLS certificate file
+      # certFile: '' # </path/to/tls.crt>
+      # Path to your TLS private key
+      # keyFile: '' # </path/to/tls.key> 
+    # MLFlow tracking server configuration
     mlflow:
-      # Assumes you have deployed https://github.com/sonatype/helm3-charts/ in the same namespace
-      upstream: http://mlflow-repository-manager:8081
-      # Replace with whatever you set under System > Capabilities
-      rutAuthHeader: X-SSO-User
+      tenants: []
+      # - name: tenant-name
+      #   # URL of the Upstream MLFlow server
+      #   upstream: http[s]://<host>:<port>[/<base path>]
+    # OIDC authentication/authorization configuration
     oidc:
-      # Assumes you're using https://github.com/oauth2-proxy/oauth2-proxy
-      accessTokenHeader: X-Forwarded-Access-Token
-      syncInterval: 5m
-      # Assumes you're using Keycloak, generates a random password on first login
-      userTemplate: |-
-        userId: '{{ .Token.Claims.preferred_username }}'
-        firstName: '{{ .Token.Claims.given_name }}'
-        lastName: '{{ .Token.Claims.family_name }}'
-        emailAddress: '{{ .Token.Claims.email }}'
-        password: '{{ randBytes 64 | b64enc }}'
-        status: 'active'
-        roles: ['nx-anonymous']
-      # Give a user any Kecloak realm_roles that start with nx-
-      # Replace this with whatever rules your organization has
-      roleTemplates:
-      - |-
-        {{- with .Token.Claims.realm_access }}
-        {{- with .roles }}
-        {{- range .Token.Claims.realm_access.roles }}
-        {{- if hasPrefix "nx-" . }}
-        - {{ . }}
-        {{- end }}
-        {{- end }}
-        {{- end }}
-        {{- end }}
-      defaultRoles:
-      - nx-anonymous
-
-credentials:
-  # Reference to secret containing credentials
-  existingSecret:
-    name: 
-    usernameKey: username
-    passwordKey: password
-  # hard-coded values, defaults to mlflow defaults
-  username: admin
-  password: admin123
+      # Name of the HTTP header to expect the downstream proxy to set to the JWT OIDC Access token 
+      # Defaults to that provided by OAuth2Proxy using --pass-access-token
+      # accessTokenHeader: X-Forwarded-Access-Token
+    
+      # A go template which validates that a user is allowed to perform a request within a tenant.
+      # If the access should be denied, it must produce an error message (Or an HTML document with that 
+      # error message) explaining the reason.
+      # If the result is entirely whitespace (or empty), access is granted.
+      # 
+      # Variables provided:
+      # .Token: See https://pkg.go.dev/github.com/golang-jwt/jwt/v4#section-readme
+      # .Tenants: The list of tenants, (as provided in the field mlflow.tenants)
+      # .Request A request object, see https://pkg.go.dev/net/http#Request for available fields
+      # 
+      # The default policy checks if a user has a Keycloak realm role matching the ID of the tenant
+      # in question, and allows all requests if they do
+      # rbacPolicy: |-
+      # <template>
+       

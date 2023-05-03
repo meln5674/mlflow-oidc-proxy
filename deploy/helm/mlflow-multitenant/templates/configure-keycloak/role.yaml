@@ -1,0 +1,22 @@
+{{- if and .Values.keycloak.enabled .Values.keycloakJob.enabled .Values.keycloakJob.rbac.create }}
+{{- $oauth2Proxy := index .Values "oauth2-proxy" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "mlflow-multitenant.keycloakJob.fullname" . }}
+  labels:
+    {{- include "mlflow-multitenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: configure-keycloak
+rules:
+- apiGroups: ['']
+  resources: [secrets]
+  verbs: [create]
+- apiGroups: ['']
+  resources: [secrets]
+  verbs: [get,patch,update]
+  resourceNames:
+  - {{ $oauth2Proxy.configuration.existingSecret }}
+  {{- range .Values.keycloakJob.extraClients }}
+  - {{ .secretName }}
+  {{- end }}
+{{- end }}

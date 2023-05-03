@@ -1,0 +1,39 @@
+{{- if .Values.postgres.enabled }}
+{{- $dot := . }}
+apiVersion: "acid.zalan.do/v1"
+kind: postgresql
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" . }}-postgres
+  labels:
+    {{- include "mlflow-multitenant.labels" . | nindent 4 }}
+  {{- with .Values.postgres.extraMetadataTemplate }}
+  {{- tpl . | nindent 2 }}
+  {{- end }}
+spec:
+  teamId: {{ include "mlflow-multitenant.fullname" . }}
+  users:
+    postgres:
+    - superuser
+    - createdb
+    {{- if and .Values.keycloak.enabled .Values.postgres.makeKeycloakDatabase }}
+    {{ .Values.keycloak.externalDatabase.user }}: []
+    {{- end }}
+    {{- range .Values.mlflow.tenants }}
+    {{ tpl $dot.Values.postgres.userTemplate (set (deepCopy $dot) "Tenant" .) }}: []
+    {{- end }}
+    {{- with .Values.postgres.extraUsers }}
+    {{- . | toYaml | nindent 4 }}
+    {{- end }}
+  databases:
+    postgres: postgres
+    {{- if and .Values.keycloak.enabled .Values.postgres.makeKeycloakDatabase }}
+    {{ .Values.keycloak.externalDatabase.database }}: {{ .Values.keycloak.externalDatabase.user }}
+    {{- end }}
+    {{- range .Values.mlflow.tenants }}
+    {{ tpl $dot.Values.postgres.databaseTemplate (set (deepCopy $dot) "Tenant" .) }}: {{ tpl $dot.Values.postgres.userTemplate (set (deepCopy $dot) "Tenant" .) }}
+    {{- end }}
+    {{- with .Values.postgres.extraDatabases }}
+    {{- . | toYaml | nindent 4 }}
+    {{- end }}
+  {{- include "mlflow-multitenant.mergeValuesAndTemplate" (list . .Values.postgres.extraSpec .Values.postgres.extraSpecTemplate) | nindent 2 }} 
+{{- end }}

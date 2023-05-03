@@ -1,0 +1,24 @@
+mlflow:
+  tenants:
+  - name: tenant-1
+    valuesTemplate: |
+      image:
+        tag: {{ include "mlflow-multitenant.fullname" . }}
+  - name: tenant-2
+    values:
+      resources:
+        requests:
+          cpu: 4
+  - name: tenant-3
+    values:
+      ingress:
+        enabled: true
+        className: something
+    valuesTemplate: |
+      ingress:
+        hosts:
+        {{- range := list "a" "b" "c" }}
+        - host: {{ . }}
+          path: /
+          pathType: Prefix
+        {{- end }}

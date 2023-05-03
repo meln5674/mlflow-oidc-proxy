@@ -243,8 +243,7 @@ var _ = Describe("Tenant 1", func() {
 
 		// mouseClick(newLauncherButton, chromedp.ButtonLeft)
 		// For whatever reason, when using a selector, this element is selected twice
-		// terminalButton := `div.jp-LauncherCard[title="Start a new terminal session"]`
-		terminalButton := b.XPath(`/html/body/div[1]/div[3]/div[2]/div[1]/div[3]/div[4]/div[3]/div/div/div[4]/div[2]/div[1]`)
+		terminalButton := `div:not([aria-hidden="true"]) > div.lm-Widget.p-Widget.jp-Launcher div.jp-LauncherCard[title="Start a new terminal session"]`
 		Eventually(terminalButton, "10s").Should(b.Exist())
 
 		// time.Sleep(1 * time.Hour)

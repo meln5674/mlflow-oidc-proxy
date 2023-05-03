@@ -19,9 +19,6 @@ spec:
       {{- end }}
       labels:
         {{- include "mlflow-oidc-proxy.selectorLabels" . | nindent 8 }}
-        {{- if not .Values.credentials.existingSecret.name }}
-        mlflow-oidc-proxy/secret-hash: '{{ include "mlflow-oidc-proxy.secretContents" . | adler32sum }}'
-        {{- end }}
         {{- if not .Values.config.existingConfigMap.name }}
         mlflow-oidc-proxy/configmap-hash: '{{ include "mlflow-oidc-proxy.configMapContents" . | adler32sum }}'
         {{- end }}
@@ -39,17 +36,6 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          env:
-          - name: NEXUS_OIDC_PROXY_NEXUS_USERNAME
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "mlflow-oidc-proxy.secretName" . }}
-                key: {{ .Values.credentials.existingSecret.usernameKey }}
-          - name: NEXUS_OIDC_PROXY_NEXUS_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "mlflow-oidc-proxy.secretName" . }}
-                key: {{ .Values.credentials.existingSecret.passwordKey }}
           ports:
             - name: http
               containerPort: 8080

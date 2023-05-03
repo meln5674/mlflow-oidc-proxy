@@ -1,0 +1,354 @@
+# Default values for mlflow-multitenant.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Values for MLFlow
+mlflow:
+  # The list of tenants
+  tenants: []
+  # - id: my-tenant # This must be a valid DNS label, e.g. lowercase, numbers, and hypens
+  #   name: A human-readable description
+  #   values: {} # These values will override the global mlflow values
+  #   valuesTemplate: |
+  #     {{/* This string will be parsed as a template, and will override values */}}
+  
+  # Database configuration for backend store
+  # Defaults to using the postgres cluster deployed by the postgres-operator,
+  # with a separate database for each tenant
+  database:
+    uriTemplate: 'postgresql+psycopg2://$(DATABASE_USER):$(DATABASE_PASSWORD)@{{ include "mlflow-multitenant.fullname" . }}-postgres:5432/{{ tpl .Values.postgres.databaseTemplate . }}?sslmode=require'
+    credentials:
+      usernameTemplate: 
+      passwordTemplate: 
+      existingSecret:
+        nameTemplate: '{{ tpl .Values.postgres.userTemplate . }}.{{ include "mlflow-multitenant.fullname" . }}-postgres.credentials.postgresql.acid.zalan.do'
+        usernameKey: username
+        passwordKey: password
+  # Object store configuration for the artifact store
+  # Default to using the minio tenant deployed by the minio-operator,
+  # With a separate bucket for each tenant
+  objectStore:
+    uriTemplate: 's3://{{ tpl .Values.minioJob.bucketTemplate . }}'
+    credentials:
+      accessKeyTemplate:
+      secretKeyTemplate:
+      existingSecret:
+        nameTemplate: '{{ tpl .Values.minioJob.secretNameTemplate . }}'
+        accessKeyKey: AWS_ACCESS_KEY_ID
+        secretKeyKey: AWS_SECRET_ACCESS_KEY
+  # Common values for all tenants
+  values:
+    replicaCount: 2
+
+    image:
+      repository: docker.io/ubuntu/mlflow
+      pullPolicy: IfNotPresent
+      # Overrides the image tag whose default is the chart appVersion.
+      tag: ""
+
+    extraArgs: []
+    
+    extraEnv: []
+    
+    volumes: []
+    
+    volumeMounts: []
+   
+    # pip requirements to install on startup
+    # This is what is required for the default setup
+    # Production setups should use a custom images with their dependencies pre-installed 
+    requirements:
+      psycopg2-binary: ""
+      boto3: ""
+
+    imagePullSecrets: []
+    nameOverride: ""
+    fullnameOverride: ""
+
+    serviceAccount:
+      # Specifies whether a service account should be created
+      create: true
+      # Annotations to add to the service account
+      annotations: {}
+      # The name of the service account to use.
+      # If not set and create is true, a name is generated using the fullname template
+      name: ""
+
+    podAnnotations: {}
+
+    podSecurityContext: {}
+      # fsGroup: 2000
+
+    securityContext: {}
+      # capabilities:
+      #   drop:
+      #   - ALL
+      # readOnlyRootFilesystem: true
+      # runAsNonRoot: true
+      # runAsUser: 1000
+
+    service:
+      type: ClusterIP
+      port: 80
+
+    ingress:
+      enabled: false
+      className: ""
+      annotations: {}
+        # kubernetes.io/ingress.class: nginx
+        # kubernetes.io/tls-acme: "true"
+      hosts:
+        - host: chart-example.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+      tls: []
+      #  - secretName: chart-example-tls
+      #    hosts:
+      #      - chart-example.local
+
+    resources: {}
+      # We usually recommend not to specify default resources and to leave this as a conscious
+      # choice for the user. This also increases chances charts run on environments with little
+      # resources, such as Minikube. If you do want to specify resources, uncomment the following
+      # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+      # limits:
+      #   cpu: 100m
+      #   memory: 128Mi
+      # requests:
+      #   cpu: 100m
+      #   memory: 128Mi
+
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 100
+      targetCPUUtilizationPercentage: 80
+      # targetMemoryUtilizationPercentage: 80
+
+    nodeSelector: {}
+
+    tolerations: []
+
+    affinity: {}
+
+
+
+  valuesTemplate: |
+    {{/* This string will be parsed as a template, and will override values */}}
+
+keycloak:
+  enabled: true
+
+  replicaCount: 2
+  # This configuration assumes you are using the bundled operator-managed postgres
+  postgres:
+    enabled: false
+  externalDatabase:
+    # These two will change depending on the release name
+    host: mlflow-multitenant-postgres
+    existingSecret: keycloak.mlflow-multitenant-postgres.credentials.postgresql.acid.zalan.do
+    existingSecretPasswordKey: password
+    # These two control the generated database and user
+    user: keycloak
+    database: keycloak
+    # This will change depending on the release name
+  # This configuration assumes you are using the bundled cert-manager managed certificates
+  tls:
+    enabled: true
+    usePem: true
+    # This field controls the generated secret name when using the bundled certs
+    existingSecret: mlflow-multitenant-keycloak-tls
+  ingress:
+    # This must match tls.existingSecret if you want to use the same certificate
+    extraTls:
+    - secretName: mlflow-multitenant-keycloak-tls
+      hosts:
+      - '{{ .Values.ingress.hostname }}'
+    
+
+# Run a job that waits for keycloak to become healthy, then generate a realm, OIDC client and secret,
+# along with a random cookie secret, and store it in a secret for use by the oauth2-proxy
+# Disable if not using the bundled keycloak or oauth2-proxy, or if you wish to manually generate these
+keycloakJob:
+  enabled: true
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+  rbac:
+    create: true
+
+  # This realm will be created and used for the mlflow client
+  realm: mlflow-multitenant
+  # This clientID will be used for the client
+  clientID: mlflow
+  # The default mlflow-oidc-proxy policy assumes that if a user has a role
+  # with the same name as the tenant ID, they are authorized to access that tenant.
+  # If this is set to true, the job will ensure a role exists for each tenant defined
+  createTenantRoles: true
+
+  # Extra clients to create in the same realm
+  extraClients: []
+  # - id: foo
+  #   secretName: my-secret-name
+  #   callbackURL: https://some.other.service/oauth2/callback
+
+  kubectl:
+    image:
+      registry: docker.io
+      repository: bitnami/kubectl
+      tag: # Defaults to the semver of the kubernetes cluster
+
+# If enabled, cert-manager certificates will be generated for keycloak and oauth2-proxy
+# based on the following values:
+# - keycloak.ingress.hostname: common name, subject alternative names
+# - keycloak.ingress.extraHosts: subject alternative names
+# - keycloak.tls.existingSecret: generated secret name
+# - oauth2-proxy.ingress.hostname: common name, subject alternative names
+# - oauth2-proxy.ingress.extraHosts: subject alternative names
+# - oauth2-proxy.ingress.existingSecretName: generated secret name
+certManagerCerts:
+  enabled: true
+
+  # Specify an existing issuer, otherwise, a self-signed CA will be bootstrapped
+  existingIssuer:
+    name: ''
+    # Set to ClusterIssuer if using a cluster-scoped issuer
+    kind: Issuer
+
+oauth2-proxy:
+  enabled: true
+
+  replicaCount: 2
+
+  # The specified configmap and secret will be generated
+  # This must be set in order to be able to template the proxy and keycloak information 
+  # All non-sensitive values in configuration will be copied to said configmap
+  # If not using the bundled keycloak or the automatic job, these must be set to the empty string
+  # to use the default behavior of the subchart
+  configuration:
+    # This configuration assumes you are using the bundled keycloak and certificates
+    existingSecret: mlflow-multitenant-oidc
+    # This is the name of a configmap to generate in this chart
+    # This is required in order to use the full chart's values in the content template
+    existingConfigmap: mlflow-multitenant-oauth2-proxy
+    content: |
+      {{- $oauth2Proxy := index .Values "oauth2-proxy" }}
+      {{- $mlflowOIDCProxy := index .Values "mlflow-oidc-proxy" }}
+      {{- $mlflowOIDCProxyChart := (index .Subcharts "mlflow-oidc-proxy").Chart }}
+      {{- $mlflowOIDCProxyDot := set (set (deepCopy .) "Values" $mlflowOIDCProxy) "Chart" $mlflowOIDCProxyChart }}
+      {{- $upstreamHost := include "mlflow-oidc-proxy.fullname" $mlflowOIDCProxyDot }}
+      {{- $upstreamPort := $mlflowOIDCProxy.service.port }}
+      {{- $upstreamTLS := not (empty $mlflowOIDCProxy.config.yaml.tls.enabled) }}
+      {{- $upstreamProto := ternary "https" "http" $upstreamTLS }}
+      upstreams=[ "{{ $upstreamProto }}://{{ $upstreamHost }}:{{ $upstreamPort }}" ]
+      redirect_url="{{ include "mlflow-multitenant.externalURL" . }}/oauth2/callback"
+      provider="oidc"
+      provider_display_name="Keycloak"
+      oidc_issuer_url="https://{{ .Values.keycloak.ingress.hostname }}/realms/{{ .Values.keycloakJob.realm }}"
+      scope="profile roles profile email openid"
+      {{- range $oauth2Proxy.extraVolumeMounts }}
+      {{- if eq .name "provider-ca" }}
+      provider_ca_files=["{{ .mountPath }}"]
+      {{- end }}
+      {{- end }}
+      pass_access_token=true
+      email_domains=["*"]
+      exchange_offline_jwt_bearer_tokens=true
+  extraVolumes:
+  - name: provider-ca
+    secret:
+      # This will change depending on the release name
+      secretName: mlflow-multitenant-ca 
+  extraVolumeMounts:
+  - name: provider-ca
+    # This must match the value in configuration.content
+    mountPath: /var/run/secrets/provider-ca/ca.crt 
+    subPath: ca.crt
+  ingress:
+    # This controls the generated secret using cert-manager
+    existingSecretName: mlflow-multitenant-oauth2-proxy-tls
+    # The bitnami chart is currently broken and this hack is a workaround
+    extraTls:
+    - hosts:
+      - '{{ .Values.ingress.hostname }}'
+      secretName: '{{ .Values.ingress.existingSecretName }}'
+
+mlflow-oidc-proxy:
+  enabled: true
+
+  replicaCount: 2
+
+  config:
+    # The specified configmap will be generated
+    # This must be set in order to be able to template the tenant information.
+    # All other values can be set normally
+    existingConfigMap:
+      name: mlflow-multitenant
+      key: mlflow-oidc-proxy.cfg
+    # See the mlflow-oidc-proxy chart values.yaml for the list of available configurations
+    # All values here will be merged with the autogenerated values from .mlflow.tenants and
+    # stored in the above listed configmap
+    yaml: {}
+       
+postgres:
+  enabled: true
+  databaseTemplate: '{{ .Tenant.id | snakecase }}'
+  userTemplate: 'mlflow-{{ .Tenant.id }}'
+  extraUsers: {}
+  extraDatabases: {}
+  extraSpec:
+    numberOfInstances: 2
+    volume:
+      size: 1Gi
+    postgresql:
+      version: "15"
+    # This configuration assumes you are using the bundled cert-manager managed certs
+    # See https://github.com/zalando/postgres-operator/blob/af084a5a650527c43f0c0fc579551a741e77f5c8/docs/user.md#custom-tls-certificates
+    spiloFSGroup: 103
+    tls:
+      caFile: ca.crt
+  extraSpecTemplate: |
+    {{/* This string will be parsed as a template, and will override extraSpec */}}
+    tls:
+      secretName: {{ include "mlflow-multitenant.fullname" . }}-postgres-tls
+  # If not using the bundled keycloak, or using an existing database for it, set to false
+  makeKeycloakDatabase: true
+minio:
+  enabled: true
+  replicas: 3
+  # These are set to something ridiculous in the default values
+  persistence:
+    size: 1Gi
+  resources:
+    requests:
+      memory: 1Gi
+
+minioJob:
+  enabled: true 
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+  rbac:
+    create: true
+
+  secretNameTemplate: '{{ include "mlflow-multitenant.fullname" . }}-minio-{{ .Tenant.id }}'
+  accessKeyTemplate: '{{ .Tenant.id }}'
+  bucketTemplate: '{{ .Tenant.id }}'
+
+  kubectl:
+    image:
+      registry: docker.io
+      repository: bitnami/kubectl
+      tag: # Defaults to the semver of the kubernetes cluster
+

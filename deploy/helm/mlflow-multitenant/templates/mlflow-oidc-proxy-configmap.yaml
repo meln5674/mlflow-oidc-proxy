@@ -1,0 +1,22 @@
+{{- $dot := . }}
+{{- $mlflowOIDCProxy := index .Values "mlflow-oidc-proxy" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $mlflowOIDCProxy.config.existingConfigMap.name }}
+  labels:
+    {{- include "mlflow-multitenant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mlflow-oidc-proxy
+data:
+  {{ $config := deepCopy $mlflowOIDCProxy.config.yaml }}
+  {{ $tenants := $mlflowOIDCProxy.config.yaml.mlflow.tenants | default (list) }}
+  {{- range $tenant := .Values.mlflow.tenants }}
+  {{/* TODO: Get service port for tenant from computing values */}}
+  {{- $upstream := print "http://" (include "mlflow-multitenant.tenant.fullname" (list $dot $tenant)) }}
+  {{ $tenants = append $tenants (dict "id" $tenant.id "name" $tenant.name "upstream" $upstream) }}
+  {{- end }}
+  {{- $_ := set $config.mlflow "tenants" $tenants }}
+  {{- $externalURL :=  $config.http.externalURL | default (include "mlflow-multitenant.externalURL" .) }}
+  {{- $_ = set $config.http "externalURL" $externalURL }}
+  mlflow-oidc-proxy.cfg: |
+    {{- $config | toYaml | nindent 4 }}

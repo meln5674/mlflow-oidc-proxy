@@ -1,0 +1,5 @@
+mlflow:
+  values:
+    replicaCount: 2
+  valuesTemplate: |
+    replicaCount: 3

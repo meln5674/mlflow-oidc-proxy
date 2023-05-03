@@ -1,0 +1,3 @@
+mlflow:
+  tenants:
+  - name: tenant-1

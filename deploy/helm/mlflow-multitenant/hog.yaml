@@ -1,0 +1,33 @@
+apiVersion: helm-hog.meln5674.github.com/v1alpha1
+Kind: Project
+
+partsDirs:
+- hog/parts
+
+variables:
+  keycloak:
+    on: []
+    off: ['no-keycloak']
+  oauth2-proxy:
+    on: []
+    off: ['no-oauth2-proxy']
+  mlflow-oidc-proxy:
+    on: []
+    off: ['no-mlflow-oidc-proxy']
+  postgres:
+    on: []
+    off: ['no-postgres']
+  minio:
+    on: []
+    off: ['no-minio']
+  tenants:
+    zero: []
+    one: ['single-tenant']
+    two: ['two-tenants']
+    three: ['three-tenants']
+    ten: ['ten-tenants']
+  mlflow-values:
+    none: []
+    values: ['mlflow-values']
+    values-template: ['mlflow-values-template']
+    values-and-template: ['mlflow-values-and-template']

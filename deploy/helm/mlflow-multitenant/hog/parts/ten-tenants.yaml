@@ -1,0 +1,12 @@
+mlflow:
+  tenants:
+  - name: tenant-1
+  - name: tenant-2
+  - name: tenant-3
+  - name: tenant-4
+  - name: tenant-5
+  - name: tenant-6
+  - name: tenant-7
+  - name: tenant-8
+  - name: tenant-9
+  - name: tenant-10

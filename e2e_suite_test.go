@@ -48,99 +48,156 @@ var _ = BeforeSuite(func(ctx context.Context) {
 
 	ClusterAction(clusterID, "Watch Pods", watchPods.Setup(), watchPods.Cleanup())
 
-	certManagerID := Release(clusterID, &certManager)
+	if false {
 
-	certsID := Manifests(clusterID, &certs, ResourceDependencies{
-		Releases: []ReleaseID{certManagerID},
-	})
+		certManagerID := Release(clusterID, &certManager)
 
-	ingressNginxID := Release(clusterID, &ingressNginx, ResourceDependencies{
-		Manifests: []ManifestsID{certsID},
-	})
+		certsID := Manifests(clusterID, &certs, ResourceDependencies{
+			Releases: []ReleaseID{certManagerID},
+		})
 
-	waitForIngressWebhookID := ClusterAction(clusterID, "Wait for Ingress Webhook", waitForIngressWebhook, nil, ResourceDependencies{
-		Releases: []ReleaseID{ingressNginxID},
-	})
+		ingressNginxID := Release(clusterID, &ingressNginx, ResourceDependencies{
+			Manifests: []ManifestsID{certsID},
+		})
 
-	kubeIngressProxyID := Release(clusterID, &kubeIngressProxy, ResourceDependencies{
-		Releases: []ReleaseID{ingressNginxID},
-	})
+		waitForIngressWebhookID := ClusterAction(clusterID, "Wait for Ingress Webhook", waitForIngressWebhook, nil, ResourceDependencies{
+			Releases: []ReleaseID{ingressNginxID},
+		})
 
-	postgresOperatorID := Release(clusterID, &postgresOperator, ResourceDependencies{
-		Manifests: []ManifestsID{certsID},
-	})
+		kubeIngressProxyID := Release(clusterID, &kubeIngressProxy, ResourceDependencies{
+			Releases: []ReleaseID{ingressNginxID},
+		})
 
-	postgresID := Manifests(clusterID, &postgres, ResourceDependencies{
-		Releases: []ReleaseID{postgresOperatorID},
-	})
+		postgresOperatorID := Release(clusterID, &postgresOperator, ResourceDependencies{
+			Manifests: []ManifestsID{certsID},
+		})
 
-	postgresSecretsReadyID := ClusterAction(clusterID, "Wait for Postgres Secrets", postgresSecretsReady, nil)
+		postgresID := Manifests(clusterID, &postgres, ResourceDependencies{
+			Releases: []ReleaseID{postgresOperatorID},
+		})
 
-	minioID := Release(clusterID, &minio)
+		postgresSecretsReadyID := ClusterAction(clusterID, "Wait for Postgres Secrets", postgresSecretsReady, nil)
 
-	mlflowIDs := []ReleaseID{
-		Release(clusterID, &mlflow[0], ResourceDependencies{
-			Releases:       []ReleaseID{minioID},
+		minioID := Release(clusterID, &minio)
+
+		mlflowIDs := []ReleaseID{
+			Release(clusterID, &mlflow[0], ResourceDependencies{
+				Releases:       []ReleaseID{minioID},
+				Manifests:      []ManifestsID{postgresID},
+				ClusterActions: []ClusterActionID{postgresSecretsReadyID},
+			}),
+			Release(clusterID, &mlflow[1], ResourceDependencies{
+				Releases:       []ReleaseID{minioID},
+				Manifests:      []ManifestsID{postgresID},
+				ClusterActions: []ClusterActionID{postgresSecretsReadyID},
+			}),
+		}
+
+		keycloakID := Release(clusterID, &keycloak, ResourceDependencies{
 			Manifests:      []ManifestsID{postgresID},
-			ClusterActions: []ClusterActionID{postgresSecretsReadyID},
-		}),
-		Release(clusterID, &mlflow[1], ResourceDependencies{
-			Releases:       []ReleaseID{minioID},
-			Manifests:      []ManifestsID{postgresID},
-			ClusterActions: []ClusterActionID{postgresSecretsReadyID},
-		}),
-	}
+			ClusterActions: []ClusterActionID{waitForIngressWebhookID},
+		})
 
-	keycloakID := Release(clusterID, &keycloak, ResourceDependencies{
-		Manifests:      []ManifestsID{postgresID},
-		ClusterActions: []ClusterActionID{waitForIngressWebhookID},
-	})
+		keycloakSetupID := ClusterAction(clusterID, "Create Keycloak Realm, Users, and Clients", keycloakSetup("keycloak-0", "REALM=integration-test", "KEYCLOAK_URL=https://keycloak.default.svc.cluster.local"), nil, ResourceDependencies{
+			Releases: []ReleaseID{keycloakID},
+		})
 
-	keycloakSetupID := ClusterAction(clusterID, "Create Keycloak Realm, Users, and Clients", keycloakSetup, nil, ResourceDependencies{
-		Releases: []ReleaseID{keycloakID},
-	})
+		mlflowOIDCProxySetupID := ClusterAction(clusterID, "Generate MLFlow OIDC Proxy ConfigMap", mlflowOIDCProxySetup, nil)
 
-	mlflowOIDCProxySetupID := ClusterAction(clusterID, "Generate MLFlow OIDC Proxy ConfigMap", mlflowOIDCProxySetup, nil)
+		mlflowOIDCProxyConfigID := Manifests(clusterID, &mlflowOIDCProxyConfig, ResourceDependencies{
+			ClusterActions: []ClusterActionID{mlflowOIDCProxySetupID},
+		})
 
-	mlflowOIDCProxyConfigID := Manifests(clusterID, &mlflowOIDCProxyConfig, ResourceDependencies{
-		ClusterActions: []ClusterActionID{mlflowOIDCProxySetupID},
-	})
+		mlflowOIDCProxyID := Release(clusterID, &mlflowOIDCProxy, ResourceDependencies{
+			ClusterActions: []ClusterActionID{mlflowOIDCProxySetupID},
+			Manifests:      []ManifestsID{mlflowOIDCProxyConfigID},
+			CustomImages:   []CustomImageID{mlflowOIDCProxyImageID},
+		})
 
-	mlflowOIDCProxyID := Release(clusterID, &mlflowOIDCProxy, ResourceDependencies{
-		ClusterActions: []ClusterActionID{mlflowOIDCProxySetupID},
-		Manifests:      []ManifestsID{mlflowOIDCProxyConfigID},
-		CustomImages:   []CustomImageID{mlflowOIDCProxyImageID},
-	})
+		oauth2ProxySetupID := ClusterAction(clusterID, "Generate OAuth2 Proxy ConfigMap", oauth2ProxySetup, nil)
 
-	oauth2ProxySetupID := ClusterAction(clusterID, "Generate OAuth2 Proxy ConfigMap", oauth2ProxySetup, nil)
+		oauth2ProxyConfigID := Manifests(clusterID, &oauth2ProxyConfig, ResourceDependencies{
+			ClusterActions: []ClusterActionID{oauth2ProxySetupID},
+			Releases:       []ReleaseID{ingressNginxID},
+		})
 
-	oauth2ProxyConfigID := Manifests(clusterID, &oauth2ProxyConfig, ResourceDependencies{
-		ClusterActions: []ClusterActionID{oauth2ProxySetupID},
-		Releases:       []ReleaseID{ingressNginxID},
-	})
+		oauth2ProxyID := Release(clusterID, &oauth2Proxy, ResourceDependencies{
+			Releases:         []ReleaseID{keycloakID},
+			Manifests:        []ManifestsID{oauth2ProxyConfigID},
+			ThirdPartyImages: []ThirdPartyImageID{oauth2ProxyImageID},
+			ClusterActions:   []ClusterActionID{keycloakSetupID, waitForIngressWebhookID},
+		})
 
-	oauth2ProxyID := Release(clusterID, &oauth2Proxy, ResourceDependencies{
-		Releases:         []ReleaseID{keycloakID},
-		Manifests:        []ManifestsID{oauth2ProxyConfigID},
-		ThirdPartyImages: []ThirdPartyImageID{oauth2ProxyImageID},
-		ClusterActions:   []ClusterActionID{keycloakSetupID, waitForIngressWebhookID},
-	})
+		jupyterhubID := Release(clusterID, &jupyterhub, ResourceDependencies{
+			Releases:       []ReleaseID{keycloakID},
+			CustomImages:   []CustomImageID{jupyterhubImageID},
+			ClusterActions: []ClusterActionID{keycloakSetupID, waitForIngressWebhookID, postgresSecretsReadyID},
+		})
 
-	jupyterhubID := Release(clusterID, &jupyterhub, ResourceDependencies{
-		Releases:       []ReleaseID{keycloakID},
-		CustomImages:   []CustomImageID{jupyterhubImageID},
-		ClusterActions: []ClusterActionID{keycloakSetupID, waitForIngressWebhookID},
-	})
+		_ = ResourceDependencies{
+			Releases: []ReleaseID{
+				kubeIngressProxyID,
+				jupyterhubID,
+				oauth2ProxyID,
+				mlflowOIDCProxyID,
+				mlflowIDs[0],
+				mlflowIDs[1],
+			},
+		}
 
-	_ = ResourceDependencies{
-		Releases: []ReleaseID{
-			kubeIngressProxyID,
-			jupyterhubID,
-			oauth2ProxyID,
-			mlflowOIDCProxyID,
-			mlflowIDs[0],
-			mlflowIDs[1],
-		},
+	} else {
+		mlflowDepsID := Release(clusterID, &mlflowMultitenantDeps)
+
+		ingressNginxID := Release(clusterID, &ingressNginx2, ResourceDependencies{
+			//	Manifests: []ManifestsID{certsID},
+		})
+
+		waitForIngressWebhookID := ClusterAction(clusterID, "Wait for Ingress Webhook", waitForIngressWebhook, nil, ResourceDependencies{
+			Releases: []ReleaseID{ingressNginxID},
+		})
+
+		kubeIngressProxyID := Release(clusterID, &kubeIngressProxy, ResourceDependencies{
+			Releases: []ReleaseID{ingressNginxID},
+		})
+
+		mlflowID := Release(clusterID, &mlflowMultitenant, ResourceDependencies{
+			Releases:         []ReleaseID{mlflowDepsID},
+			ThirdPartyImages: []ThirdPartyImageID{oauth2ProxyImageID},
+			CustomImages:     []CustomImageID{mlflowOIDCProxyImageID},
+			ClusterActions:   []ClusterActionID{waitForIngressWebhookID},
+		})
+
+		certsID := Manifests(clusterID, &certsNoIssuer, ResourceDependencies{
+			Releases: []ReleaseID{mlflowDepsID, mlflowID},
+		})
+
+		postgresSecretsReadyID := ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, nil, ResourceDependencies{
+			Releases: []ReleaseID{mlflowID},
+		})
+
+		jupyterhubID := Release(clusterID, &jupyterhub2, ResourceDependencies{
+			Releases:       []ReleaseID{mlflowID},
+			CustomImages:   []CustomImageID{jupyterhubImageID},
+			ClusterActions: []ClusterActionID{waitForIngressWebhookID, postgresSecretsReadyID},
+		})
+
+		keycloakSetupID := ClusterAction(clusterID, "Create Keycloak Realm, Users, and Clients", keycloakSetup("mlflow-multitenant-keycloak-0", "REALM=mlflow-multitenant", "USERS_ONLY=1", "KEYCLOAK_URL=https://mlflow-multitenant-keycloak.default.svc.cluster.local"), nil, ResourceDependencies{
+			Releases: []ReleaseID{mlflowID},
+		})
+
+		_ = ResourceDependencies{
+			Releases: []ReleaseID{
+				kubeIngressProxyID,
+				jupyterhubID,
+				mlflowID,
+			},
+			Manifests: []ManifestsID{
+				certsID,
+			},
+			ClusterActions: []ClusterActionID{
+				keycloakSetupID,
+			},
+		}
 	}
 
 	Gingk8sOptions(gingk8s.SuiteOpts{
@@ -230,6 +287,49 @@ spec:
 		},
 	}
 
+	certsNoIssuer = gingk8s.KubernetesManifests{
+		Name: "Certificates",
+		Resources: []string{
+			`
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: test-cert
+spec:
+  commonName: '*.mlflow-oidc-proxy-it.cluster'
+  secretName: test-cert
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: mlflow-multitenant-ca
+    kind: Issuer
+    group: cert-manager.io
+  dnsNames:
+  - '*.mlflow-oidc-proxy-it.cluster'
+`,
+		},
+
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "certificate/test-cert",
+				For:      map[string]string{"condition": "ready"},
+			},
+		},
+	}
+
+	ingressNginxBaseValues = gingk8s.NestedObject{
+		"controller": gingk8s.Object{
+			"service": gingk8s.Object{
+				"type": "ClusterIP",
+			},
+			"kind": "DaemonSet",
+			"hostPort": gingk8s.Object{
+				"enabled": true,
+			},
+		},
+	}
+
 	ingressNginx = gingk8s.HelmRelease{
 		Name: "ingress-nginx",
 		Chart: &gingk8s.HelmChart{
@@ -243,20 +343,31 @@ spec:
 			},
 		},
 		Values: []gingk8s.NestedObject{
+			ingressNginxBaseValues,
 			{
 				"controller": gingk8s.Object{
-					"service": gingk8s.Object{
-						"type": "ClusterIP",
-					},
-					"kind": "DaemonSet",
-					"hostPort": gingk8s.Object{
-						"enabled": true,
-					},
 					"extraArgs": gingk8s.Object{
 						"default-ssl-certificate": "default/test-cert",
 					},
 				},
 			},
+		},
+	}
+
+	ingressNginx2 = gingk8s.HelmRelease{
+		Name: "ingress-nginx",
+		Chart: &gingk8s.HelmChart{
+			RemoteChartInfo: gingk8s.RemoteChartInfo{
+				Repo: &gingk8s.HelmRepo{
+					Name: "ingress-nginx",
+					URL:  "https://kubernetes.github.io/ingress-nginx",
+				},
+				Name:    "ingress-nginx",
+				Version: "4.6.0",
+			},
+		},
+		Values: []gingk8s.NestedObject{
+			ingressNginxBaseValues,
 		},
 	}
 
@@ -354,6 +465,17 @@ spec:
 		},
 		gingk8s.ResourceReference{
 			Name: "mlflow-tenant-1.postgres-postgres.credentials.postgresql.acid.zalan.do",
+			Kind: "Secret",
+		},
+	)
+
+	multitenantPostgresSecretsReady = WaitForResourceExists(30*time.Second,
+		gingk8s.ResourceReference{
+			Name: "mlflow-tenant-2.mlflow-multitenant-postgres.credentials.postgresql.acid.zalan.do",
+			Kind: "Secret",
+		},
+		gingk8s.ResourceReference{
+			Name: "mlflow-tenant-1.mlflow-multitenant-postgres.credentials.postgresql.acid.zalan.do",
 			Kind: "Secret",
 		},
 	)
@@ -501,6 +623,109 @@ spec:
 		Dockerfile: "integration-test/jupyterhub.Dockerfile",
 	}
 
+	mlflowMultitenantDeps = gingk8s.HelmRelease{
+		Name: "mlflow-multitenant-deps",
+		Chart: &gingk8s.HelmChart{
+			LocalChartInfo: gingk8s.LocalChartInfo{
+				Path: "deploy/helm/mlflow-multitenant-deps",
+			},
+		},
+	}
+
+	mlflowMultitenant = gingk8s.HelmRelease{
+		Name: "mlflow-multitenant",
+		Chart: &gingk8s.HelmChart{
+			LocalChartInfo: gingk8s.LocalChartInfo{
+				Path: "deploy/helm/mlflow-multitenant",
+			},
+		},
+		ValuesFiles:  []string{"deploy/helm/mlflow-multitenant/values.yaml"},
+		UpgradeFlags: []string{"--wait-for-jobs"},
+		Set: gingk8s.Object{
+			"keycloak.ingress.enabled":              true,
+			"keycloak.ingress.ingressClassName":     "nginx",
+			"keycloak.ingress.hostname":             "keycloak.mlflow-oidc-proxy-it.cluster",
+			"keycloak.ingress.extraTls[0].hosts[0]": "keycloak.mlflow-oidc-proxy-it.cluster",
+			`keycloak.ingress.annotations.nginx\.ingress\.kubernetes\.io/proxy-buffer-size`: "1m",
+			"keycloak.tls.keystorePassword":            "keystore-password",
+			"keycloak.tls.truststorePassword":          "truststore-password",
+			"keycloak.service.type":                    "ClusterIP",
+			"keycloak.auth.adminUser":                  "admin",
+			"keycloak.auth.adminPassword":              "adminPassword",
+			"keycloak.extraVolumes[0].name":            "home",
+			"keycloak.extraVolumes[0].emptyDir.medium": "Memory",
+			"keycloak.extraVolumeMounts[0].name":       "home",
+			"keycloak.extraVolumeMounts[0].mountPath":  "/home/keycloak",
+
+			"oauth2-proxy.ingress.enabled":                true,
+			"oauth2-proxy.ingress.ingressClassName":       "nginx",
+			"oauth2-proxy.ingress.hostname":               "mlflow.mlflow-oidc-proxy-it.cluster",
+			"oauth2-proxy.ingress.extraTls[0].hosts[0]":   "mlflow.mlflow-oidc-proxy-it.cluster",
+			"oauth2-proxy.configuration.sessionStoreType": "redis",
+			"oauth2-proxy.image.registry":                 "local.host",
+			"oauth2-proxy.image.repository":               "mlflow-oidc-proxy/oauth2-proxy",
+			"oauth2-proxy.image.tag":                      "latest",
+			"oauth2-proxy.image.pullPolicy":               "Never",
+			"oauth2-proxy.hostAliases[0].ip":              getIngressControllerIP,
+			"oauth2-proxy.hostAliases[0].hostnames[0]":    "keycloak.mlflow-oidc-proxy-it.cluster",
+
+			"mlflow-oidc-proxy.image.pullPolicy": "Never",
+			"mlflow-oidc-proxy.image.repository": mlflowOIDCProxyImage.WithTag(""),
+			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultCustomImageTag,
+
+			"keycloakJob.extraClients[0].id":          "jupyterhub",
+			"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
+			"keycloakJob.extraClients[0].callbackURL": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
+
+			"postgres.extraUsers.jupyterhub":     "null",
+			"postgres.extraDatabases.jupyterhub": "jupyterhub",
+
+			"mlflow.tenants[0].id":   "tenant-1",
+			"mlflow.tenants[0].name": "Tenant 1",
+			"mlflow.tenants[1].id":   "tenant-2",
+			"mlflow.tenants[1].name": "Tenant 2",
+		},
+	}
+
+	jupyterhubBaseSet = gingk8s.Object{
+		"proxy.service.type":       "ClusterIP",
+		"ingress.enabled":          "true",
+		"ingress.hosts[0]":         "jupyterhub.mlflow-oidc-proxy-it.cluster",
+		"ingress.ingressClassName": "nginx",
+		"ingress.tls[0].hosts[0]":  "jupyterhub.mlflow-oidc-proxy-it.cluster",
+		"hub.db.type":              "postgres",
+
+		"hub.db.upgrade": "true",
+		"hub.config.JupyterHub.authenticator_class":           "oauthenticator.generic.GenericOAuthenticator",
+		"hub.config.GenericOAuthenticator.oauth_callback_url": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
+		"hub.config.GenericOAuthenticator.scope[0]":           "openid",
+		"hub.config.GenericOAuthenticator.scope[1]":           "profile",
+		"hub.config.GenericOAuthenticator.username_key":       "preferred_username",
+		"hub.config.GenericOAuthenticator.client_id":          "jupyterhub",
+		"hub.config.GenericOAuthenticator.login_service":      "Keycloak",
+		"hub.extraEnv.http_proxy":                             "http://kube-ingress-proxy:80",
+		"hub.extraEnv.https_proxy":                            "http://kube-ingress-proxy:80",
+		"hub.extraEnv.no_proxy":                               "localhost",
+		"hub.extraVolumes[0].name":                            "tls",
+		"hub.extraVolumeMounts[0].name":                       "tls",
+		"hub.extraVolumeMounts[0].mountPath":                  "/etc/ssl/certs/ca-certificates.crt",
+		"hub.extraVolumeMounts[0].subPath":                    "ca.crt",
+		"singleuser.image.name":                               jupyterhubImage.WithTag(""),
+		"singleuser.image.tag":                                gingk8s.DefaultCustomImageTag,
+		"singleuser.extraEnv.http_proxy":                      "http://kube-ingress-proxy:80",
+		"singleuser.extraEnv.https_proxy":                     "http://kube-ingress-proxy:80",
+		"singleuser.extraEnv.no_proxy":                        "localhost",
+		"singleuser.storage.extraVolumes[0].name":             "tls",
+		"singleuser.storage.extraVolumeMounts[0].name":        "tls",
+		"singleuser.storage.extraVolumeMounts[0].mountPath":   "/etc/ssl/certs/ca-certificates.crt",
+		"singleuser.storage.extraVolumeMounts[0].subPath":     "ca.crt",
+		"singleuser.storage.extraVolumes[1].name":             "src",
+		"singleuser.storage.extraVolumes[1].hostPath.type":    "Directory",
+		"singleuser.storage.extraVolumes[1].hostPath.path":    "/mnt/host/mlflow-oidc-proxy",
+		"singleuser.storage.extraVolumeMounts[1].name":        "src",
+		"singleuser.storage.extraVolumeMounts[1].mountPath":   "/mnt/host/mlflow-oidc-proxy",
+	}
+
 	jupyterhub = gingk8s.HelmRelease{
 		Name: "jupyterhub",
 		Chart: &gingk8s.HelmChart{
@@ -513,55 +738,51 @@ spec:
 				Version: "2.0.0",
 			},
 		},
-		Set: gingk8s.Object{
-			"proxy.service.type":       "ClusterIP",
-			"ingress.enabled":          "true",
-			"ingress.hosts[0]":         "jupyterhub.mlflow-oidc-proxy-it.cluster",
-			"ingress.ingressClassName": "nginx",
-			"ingress.tls[0].hosts[0]":  "jupyterhub.mlflow-oidc-proxy-it.cluster",
-			"hub.db.type":              "postgres",
-			"hub.db.url":               "postgresql+psycopg2://jupyterhub@postgres-postgres:5432/jupyterhub?sslmode=require",
+		Set: jupyterhubBaseSet.MergedFrom(gingk8s.Object{
+			"hub.config.GenericOAuthenticator.client_secret":       getKeycloakClientSecret("jupyterhub"),
+			"hub.extraVolumes[0].secret.secretName":                "test-cert",
+			"singleuser.storage.extraVolumes[0].secret.secretName": "test-cert",
 			"hub.db.password": func(ctx context.Context, cluster gingk8s.Cluster) (string, error) {
 				var password string
 				err := KubectlGetSecretValue(ctx, cluster, "jupyterhub.postgres-postgres.credentials.postgresql.acid.zalan.do", "password", &password).Run()
 				return password, err
 			},
-			"hub.db.upgrade": "true",
-			"hub.config.JupyterHub.authenticator_class":            "oauthenticator.generic.GenericOAuthenticator",
-			"hub.config.GenericOAuthenticator.oauth_callback_url":  "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
-			"hub.config.GenericOAuthenticator.scope[0]":            "openid",
-			"hub.config.GenericOAuthenticator.scope[1]":            "profile",
-			"hub.config.GenericOAuthenticator.username_key":        "preferred_username",
-			"hub.config.GenericOAuthenticator.client_id":           "jupyterhub",
-			"hub.config.GenericOAuthenticator.client_secret":       getKeycloakClientSecret("jupyterhub"),
-			"hub.config.GenericOAuthenticator.login_service":       "Keycloak",
-			"hub.config.GenericOAuthenticator.userdata_url":        "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/userinfo",
-			"hub.config.GenericOAuthenticator.token_url":           "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/token",
-			"hub.config.GenericOAuthenticator.authorize_url":       "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/auth",
-			"hub.extraEnv.http_proxy":                              "http://kube-ingress-proxy:80",
-			"hub.extraEnv.https_proxy":                             "http://kube-ingress-proxy:80",
-			"hub.extraEnv.no_proxy":                                "localhost",
-			"hub.extraVolumes[0].name":                             "tls",
-			"hub.extraVolumes[0].secret.secretName":                "test-cert",
-			"hub.extraVolumeMounts[0].name":                        "tls",
-			"hub.extraVolumeMounts[0].mountPath":                   "/etc/ssl/certs/ca-certificates.crt",
-			"hub.extraVolumeMounts[0].subPath":                     "ca.crt",
-			"singleuser.image.name":                                jupyterhubImage.WithTag(""),
-			"singleuser.image.tag":                                 gingk8s.DefaultCustomImageTag,
-			"singleuser.extraEnv.http_proxy":                       "http://kube-ingress-proxy:80",
-			"singleuser.extraEnv.https_proxy":                      "http://kube-ingress-proxy:80",
-			"singleuser.extraEnv.no_proxy":                         "localhost",
-			"singleuser.storage.extraVolumes[0].name":              "tls",
-			"singleuser.storage.extraVolumes[0].secret.secretName": "test-cert",
-			"singleuser.storage.extraVolumeMounts[0].name":         "tls",
-			"singleuser.storage.extraVolumeMounts[0].mountPath":    "/etc/ssl/certs/ca-certificates.crt",
-			"singleuser.storage.extraVolumeMounts[0].subPath":      "ca.crt",
-			"singleuser.storage.extraVolumes[1].name":              "src",
-			"singleuser.storage.extraVolumes[1].hostPath.type":     "Directory",
-			"singleuser.storage.extraVolumes[1].hostPath.path":     "/mnt/host/mlflow-oidc-proxy",
-			"singleuser.storage.extraVolumeMounts[1].name":         "src",
-			"singleuser.storage.extraVolumeMounts[1].mountPath":    "/mnt/host/mlflow-oidc-proxy",
+			"hub.db.url": "postgresql+psycopg2://jupyterhub@postgres-postgres:5432/jupyterhub?sslmode=require",
+			"hub.config.GenericOAuthenticator.userdata_url":  "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/userinfo",
+			"hub.config.GenericOAuthenticator.token_url":     "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/token",
+			"hub.config.GenericOAuthenticator.authorize_url": "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/auth",
+		}),
+	}
+
+	jupyterhub2 = gingk8s.HelmRelease{
+		Name: "jupyterhub",
+		Chart: &gingk8s.HelmChart{
+			RemoteChartInfo: gingk8s.RemoteChartInfo{
+				Repo: &gingk8s.HelmRepo{
+					Name: "jupyterhub",
+					URL:  "https://jupyterhub.github.io/helm-chart/",
+				},
+				Name:    "jupyterhub",
+				Version: "2.0.0",
+			},
 		},
+		Set: jupyterhubBaseSet.MergedFrom(gingk8s.Object{
+			"hub.config.GenericOAuthenticator.client_secret": func(ctx context.Context, cluster gingk8s.Cluster) string {
+				return KubectlReturnSecretValue(ctx, cluster, "mlflow-multitenant-jupyterhub-oidc", "client-secret")
+			},
+			"ingress.tls[0].secretName":                            "test-cert",
+			"hub.db.url":                                           "postgresql+psycopg2://jupyterhub@mlflow-multitenant-postgres:5432/jupyterhub?sslmode=require",
+			"hub.extraVolumes[0].secret.secretName":                "mlflow-multitenant-ca",
+			"singleuser.storage.extraVolumes[0].secret.secretName": "mlflow-multitenant-ca",
+			"hub.db.password": func(ctx context.Context, cluster gingk8s.Cluster) (string, error) {
+				var password string
+				err := KubectlGetSecretValue(ctx, cluster, "jupyterhub.mlflow-multitenant-postgres.credentials.postgresql.acid.zalan.do", "password", &password).Run()
+				return password, err
+			},
+			"hub.config.GenericOAuthenticator.userdata_url":  "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/userinfo",
+			"hub.config.GenericOAuthenticator.token_url":     "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/token",
+			"hub.config.GenericOAuthenticator.authorize_url": "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/auth",
+		}),
 	}
 )
 
@@ -688,10 +909,15 @@ var (
 	keycloakSetupScript []byte // Set during BeforeSuite
 )
 
-func keycloakSetup(ctx context.Context, cluster gingk8s.Cluster) error {
-	return KubectlExec(ctx, cluster, "keycloak-0", "bash", []string{"-xe"}).
-		WithStreams(gosh.BytesIn(keycloakSetupScript)).
-		Run()
+func keycloakSetup(pod string, extraEnv ...string) func(ctx context.Context, cluster gingk8s.Cluster) error {
+	fullScriptParts := make([]string, len(extraEnv))
+	copy(fullScriptParts, extraEnv)
+	fullScriptParts = append(fullScriptParts, string(keycloakSetupScript))
+	return func(ctx context.Context, cluster gingk8s.Cluster) error {
+		return KubectlExec(ctx, cluster, pod, "bash", []string{"-xe"}).
+			WithStreams(gosh.StringIn(strings.Join(fullScriptParts, "\n"))).
+			Run()
+	}
 }
 
 func minioSet() gingk8s.Object {

@@ -49,3 +49,6 @@ require (
 	k8s.io/klog/v2 v2.90.1 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
+
+// TODO: REVERT ME
+replace github.com/meln5674/gingk8s v0.0.0-20230420052937-707ed08a364f => ../gingk8s

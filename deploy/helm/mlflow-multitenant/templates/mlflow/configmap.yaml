@@ -1,0 +1,27 @@
+{{- $dot := . }}
+{{- range $tenant := .Values.mlflow.tenants }}
+{{- with (include "mlflow-multitenant.tenantValues" (list $dot $tenant)) | fromYaml | set (deepCopy $dot) "Values" }}
+{{- with .Values.Error }}
+{{ fail . }}
+{{- end }}
+{{- $tplArg := set (deepCopy $dot) "Tenant" (set (deepCopy $tenant) "Values" .Values) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mlflow-multitenant.tenant.fullname" (list . $tenant) }}
+data:
+  {{- include "mlflow.configMapData" $tplArg | nindent 2 }}
+{{- end }}
+---
+{{- end }}
+
+{{- define "mlflow.configMapData" -}}
+docker-entrypoint.sh: |
+  #!/bin/bash -xeu
+  pip install -r /var/run/requirements.txt
+  exec mlflow server --host '0.0.0.0' --port '5000' "$@"
+requirements.txt: |
+  {{- range $name, $version := .Tenant.Values.requirements }}
+  {{ $name }}{{ $version | default "" }}
+  {{- end }}
+{{- end }}

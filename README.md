@@ -41,21 +41,20 @@ Configuration is set through a configuration file for non-sentive information, a
 # HTTP server configuration
 http:
   # Address and port to listen on
-  address: <listen address>:<listen port>
+  # Defaults to 0.0.0.0:8080
+  address: <hostname or ip>:<port>
   # The external URL this server is accessible to users at
+  # Defaults to http://<address>, unless the host is 0.0.0.0,\
+  # in which case it is swapped for "localhost"
   externalURL: http[s]://<external hostname>[:<port>][/<path>]
   # Path to serve tenants at.
   # This assumes all tenants (see below) have --static-prefix=<externalURL path>/<this path>/<tenant id>
   # This is concatenated with any path from externalURL (see above) when issuing static links
   # Defaults to /tenants/
-  tenantsPath: <path>
-  # Path to serve the token generation page at
-  # This is concatenated with any path from externalURL (see above) when issuing static links
-  tokensPath: <path>
+  # tenantsPath: /<path>/
 # TLS configuration
 tls:
   # Set to true to serve using TLS (HTTPS)
-  # Default false
   enabled: <true|false>
   # Path to your TLS certificate file
   certFile: </path/to/tls.crt>
@@ -64,35 +63,35 @@ tls:
 # MLFlow tracking server configuration
 mlflow:
   tenants:
-  - name: tenant-name
-    # URL of the Upstream MLFlow server
+    # The ID of the tenant. This must be a valid DNS label, much like kubernetes object names
+  - id: tenant-name
+    # A human-readable name or description of the tenant, which will appear in UI's
+    name: Tenant Name
+    # URL of the Upstream MLFlow server.
+    # The --static-prefix for this server must match <http.externalURL path>/<http.tenantsPath>/<id>,
+    # and the API must be accessible at <upstream>/api
     upstream: http[s]://<host>:<port>[/<base path>]
 # OIDC authentication/authorization configuration
 oidc:
   # Name of the HTTP header to expect the downstream proxy to set to the JWT OIDC Access token 
-  # Defaults to that provided by OAuth2Proxy using --pass-access-token
-  accessTokenHeader: <header name>
+  # Defaults to X-Forwarded-Access-Token,
+  # which is provided by OAuth2Proxy using --pass-access-token flag
+  accessTokenHeader: <header name> 
 
-  # A go template which produes a YAML/JSON list of strings containing the tenant ID's (see above) 
-  # that a user is a member of, based on their JWT
+  # A go template which validates that a user is allowed to perform a request within a tenant.
+  # If the access should be denied, it must produce an error message (Or an HTML document with that 
+  # error message) explaining the reason.
+  # If the result is entirely whitespace (or empty), access is granted.
+  # 
   # Variables provided:
   # .Token: See https://pkg.go.dev/github.com/golang-jwt/jwt/v4#section-readme
   # .Tenants: The list of tenants, (as provided in the field mlflow.tenants)
-  # Returns: List of strings, tenant IDs user is permitted to access
-  tenantPolicy: |-
-    <template>
-  # A go tempalte which produces a list of objects representing API calls the user is permitted to make,
-  # Based on their JWT
+  # .Request A request object, see https://pkg.go.dev/net/http#Request for available fields
   # 
+  # The default policy checks if a user has a Keycloak realm role matching the ID of the tenant
+  # in question, and allows all requests if they do
   rbacPolicy: |-
     <template>
-# API Token configuration.
-# Tokens consist of a JWT signed by key private to the server that has a 
-tokens:
-  # Path to the pem-formatted private key used to sign tokens
-  keyPath: /path/to/token.key
-  # Path to the pem-formatted public key used to verify tokens
-  certPath: /path/to/token.crt
 ```
 
 ### Environment Variables
