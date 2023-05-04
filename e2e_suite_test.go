@@ -568,7 +568,8 @@ spec:
 			"config.existingConfigMap.name": "mlflow-oidc-proxy",
 			"image.pullPolicy":              "Never",
 			"image.repository":              mlflowOIDCProxyImage.WithTag(""),
-			"image.tag":                     gingk8s.DefaultCustomImageTag,
+			"image.tag":                     gingk8s.DefaultExtraCustomImageTags()[0],
+			// "image.tag":                     gingk8s.DefaultCustomImageTag,
 		},
 	}
 
@@ -671,7 +672,8 @@ spec:
 
 			"mlflow-oidc-proxy.image.pullPolicy": "Never",
 			"mlflow-oidc-proxy.image.repository": mlflowOIDCProxyImage.WithTag(""),
-			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultCustomImageTag,
+			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultExtraCustomImageTags()[0],
+			//"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultCustomImageTag,
 
 			"keycloakJob.extraClients[0].id":          "jupyterhub",
 			"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",

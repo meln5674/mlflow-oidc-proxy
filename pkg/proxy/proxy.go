@@ -31,6 +31,8 @@ const (
 Forbidden: You are not part of this tenant
 {{- end }}
 `
+	DefaultGetSubject = `{{ .Token.Claims.preferred_username }}`
+
 	// DefaultAddress is the default value of the config http.address field.
 	// It listens on localhost only on port 8088.
 	DefaultAddress = "127.0.0.1:8088"
@@ -42,10 +44,34 @@ Forbidden: You are not part of this tenant
 	DefaultAccessTokenHeader = "X-Forwarded-Access-Token"
 )
 
+const (
+	MLFlowUserTag     = "mlflow.user"
+	MLFlowUserIDField = "user_id"
+	MLFlowTagsField   = "tags"
+
+	MLFlowCreateExperimentPath      = "2.0/mlflow/experiments/create"
+	MLFlowCreateRunPath             = "2.0/mlflow/runs/create"
+	MLFlowCreateRegisteredModelPath = "2.0/mlflow/registered-models/create"
+	MLFlowCreateModelVersionPath    = "2.0/mlflow/model-versions/create"
+
+	MLFlowSetTagExperimentPath      = "2.0/mlflow/experiments/set-experiment-tag"
+	MLFlowSetTagRunPath             = "2.0/mlflow/runs/set-tag"
+	MLFlowSetTagRegisteredModelPath = "2.0/mlflow/registered-models/set-tag"
+	MLFlowSetTagModelVersionPath    = "2.0/mlflow/model-versions/set-tag"
+
+	MLFlowDeleteTagRunPath             = "2.0/mlflow/runs/delete-tag"
+	MLFlowDeleteTagRegisteredModelPath = "2.0/mlflow/registered-models/delete-tag"
+	MLFlowDeleteTagModelVersionPath    = "2.0/mlflow/model-versions/delete-tag"
+
+	MLFlowAPIPrefix  = "api/"
+	MLFlowAJAXPrefix = "ajax-api/"
+)
+
 var (
-	HomePage             *template.Template
-	ParsedDefaultPolicy  Template
-	ParsedDefaultAddress Address
+	HomePage                *template.Template
+	ParsedDefaultPolicy     Template
+	ParsedDefaultGetSubject Template
+	ParsedDefaultAddress    Address
 )
 
 func init() {
@@ -86,6 +112,12 @@ You do not have access to any tenants, please contact your administrator
 		panic(err)
 	}
 	ParsedDefaultPolicy.Raw = DefaultPolicy
+
+	ParsedDefaultGetSubject.Inner, err = template.New("oidc.getSubject [default]").Funcs(sprig.FuncMap()).Parse(DefaultGetSubject)
+	if err != nil {
+		panic(err)
+	}
+	ParsedDefaultGetSubject.Raw = DefaultGetSubject
 
 	_, err = ParsedDefaultAddress.Parse(DefaultAddress)
 	if err != nil {
@@ -168,6 +200,7 @@ type ProxyOIDCConfig struct {
 	AccessTokenHeader string   `json:"accessTokenHeader"`
 	WellKnownURL      URL      `json:"wellKnownURL"`
 	Policy            Template `json:"policy"`
+	GetSubject        Template `json:"getSubject"`
 }
 
 type ProxyMLFlowTenant struct {
@@ -199,6 +232,7 @@ type ProxyConfig struct {
 }
 
 func (p *ProxyConfig) Init() *ProxyConfig {
+	p.OIDC.GetSubject.Inner = template.New("oidc.getSubject").Funcs(sprig.FuncMap())
 	p.OIDC.Policy.Inner = template.New("oidc.policy").Funcs(sprig.FuncMap())
 	return p
 }
@@ -210,6 +244,10 @@ func (p *ProxyConfig) ApplyDefaults() (err error) {
 
 	if p.OIDC.Policy.Raw == "" {
 		p.OIDC.Policy = ParsedDefaultPolicy
+	}
+
+	if p.OIDC.GetSubject.Raw == "" {
+		p.OIDC.GetSubject = ParsedDefaultGetSubject
 	}
 
 	if p.HTTP.Address.Raw == "" {
@@ -449,113 +487,142 @@ func mutateJSON(r io.ReadCloser, f func(map[string]interface{}) error) (io.ReadC
 
 func setUserID(subject string) func(map[string]interface{}) error {
 	return func(body map[string]interface{}) error {
-		body["user_id"] = subject
+		body[MLFlowUserIDField] = subject
 		return nil
 	}
 }
 
+func setTagInList(tags []interface{}, key, value string) []interface{} {
+	found := false
+	for ix := range tags {
+		tag := tags[ix].(map[string]interface{})
+		if tag["key"] == key {
+			tag["value"] = value
+			tags[ix] = tag
+			found = true
+		}
+	}
+	if !found {
+		tags = append(tags, map[string]interface{}{
+			"key":   key,
+			"value": value,
+		})
+	}
+	return tags
+}
+
 func setUserTag(subject string) func(map[string]interface{}) error {
 	return func(body map[string]interface{}) error {
-		tags, ok := body["tags"].(map[string]interface{})
+		tags, ok := body[MLFlowTagsField].([]interface{})
 		if !ok {
-			tags = make(map[string]interface{})
-			body["tags"] = tags
+			tags = make([]interface{}, 0, 1)
 		}
-		tags["mlflow.user"] = subject
+		body[MLFlowTagsField] = setTagInList(tags, MLFlowUserTag, subject)
 		return nil
 	}
 }
 
 func setUserValue(subject string) func(map[string]interface{}) error {
 	return func(body map[string]interface{}) error {
-		if body["key"] == "mlflow.user" {
+		if body["key"] == MLFlowUserTag {
 			body["value"] = subject
 		}
 		return nil
 	}
 }
 
-func peekUserValue(userChan chan string) func(map[string]interface{}) error {
+func peekKey(keyChan chan string) func(map[string]interface{}) error {
 	return func(body map[string]interface{}) error {
-		defer close(userChan)
-		if body["key"] == "mlflow.user" {
-			userRaw, ok := body["value"]
-			var user string
-			if ok {
-				user = userRaw.(string)
-			}
-			userChan <- user
+		defer close(keyChan)
+		rawKey, ok := body["key"]
+		if !ok {
+			return nil
 		}
+		key, ok := rawKey.(string)
+		if !ok {
+			return nil
+		}
+		keyChan <- key
 		return nil
 	}
 }
 
-func (p *ProxyState) MutateRequest(w http.ResponseWriter, req *http.Request, path string, requestID string, token *jwt.Token) (rejectMsg string, err error) {
-	// The --static-prefix flag does not apply to the API, so we must manually trim it
-	if strings.HasPrefix(path, "api/") {
-		req.URL.Path = path
+func (p *ProxyState) GetSubject(token *jwt.Token) (string, error) {
+	s := strings.Builder{}
+	err := p.Config.OIDC.GetSubject.Inner.Execute(&s, PolicyContext{
+		Token: token,
+	})
+	if err != nil {
+		return "", err
 	}
-
-	// TODO: Provide a template to do this
-	tokenSubjectRaw := token.Claims.(jwt.MapClaims)["sub"]
-	tokenSubject, ok := tokenSubjectRaw.(string)
-	if !ok {
-		panic(fmt.Sprintf("Token subject was not string: %#v", tokenSubjectRaw))
+	subject := s.String()
+	if subject == "" {
+		return "", fmt.Errorf("Subject template returned empty string")
 	}
+	return subject, nil
+}
 
+func (p *ProxyState) EnforceUserTagsAndFields(w http.ResponseWriter, req *http.Request, path string, requestID string, subject string, token *jwt.Token) (rejectMsg string, err error) {
 	// Runs still have a deprecated non-tag field for the user id
-	if path == "api/2.0/mlflow/runs/create" {
-		req.Body, err = mutateJSON(req.Body, setUserID(tokenSubject))
+	if path == MLFlowCreateRunPath {
+		req.Body, err = mutateJSON(req.Body, setUserID(subject))
 		if err != nil {
 			return "", err
 		}
 		req.ContentLength = -1
 	}
 
-	// Creating any taggable resource should set the user tag to the resolved username
-	if path == "api/2.0/mlflow/runs/create" ||
-		path == "api/2.0/mlflow/experiments/create" ||
-		path == "api/2.0/mlflow/registered-models/create" ||
-		path == "api/2.0/mlflow/model-versions/create" {
-
-		req.Body, err = mutateJSON(req.Body, setUserTag(tokenSubject))
-		if err != nil {
-			return "", err
-		}
-		req.ContentLength = -1
-	}
-
-	// If the user attempts to overwrite the user tag,
-	// we just overwrite the value in their request
-	if path == "api/2.0/mlflow/runs/set-tag" ||
-		path == "api/2.0/mlflow/experiments/set-experiment-tag" ||
-		path == "api/2.0/mlflow/registered-models/set-tag" ||
-		path == "api/2.0/mlflow/model-versions/set-tag" {
-
-		req.Body, err = mutateJSON(req.Body, setUserValue(tokenSubject))
-		if err != nil {
-			return "", err
-		}
-		req.ContentLength = -1
-	}
-
-	// Deleting the user tag is not allowed
-	if path == "api/2.0/mlflow/runs/delete-tag" ||
-		path == "api/2.0/mlflow/registered-models/delete-tag" ||
-		path == "api/2.0/mlflow/model-versions/delete-tag" {
-
-		userChan := make(chan string)
-
-		req.Body, err = mutateJSON(req.Body, peekUserValue(userChan))
+	switch path {
+	case MLFlowCreateRunPath, MLFlowCreateExperimentPath, MLFlowCreateRegisteredModelPath, MLFlowCreateModelVersionPath:
+		// Creating any taggable resource should set the user tag to the resolved username
+		req.Body, err = mutateJSON(req.Body, setUserTag(subject))
 		if err != nil {
 			return "", err
 		}
 		req.ContentLength = -1
 
-		for user := range userChan {
-			if user != tokenSubject {
-				return "Deleting the mlflow.user tag is not permitted in multi-tenant mode", nil
+	case MLFlowSetTagRunPath,
+		MLFlowSetTagExperimentPath,
+		MLFlowSetTagRegisteredModelPath,
+		MLFlowSetTagModelVersionPath,
+		MLFlowDeleteTagRunPath,
+		MLFlowDeleteTagRegisteredModelPath,
+		MLFlowDeleteTagModelVersionPath:
+		// Deleting the user tag is not allowed
+		keyChan := make(chan string)
+
+		req.Body, err = mutateJSON(req.Body, peekKey(keyChan))
+		if err != nil {
+			return "", err
+		}
+		req.ContentLength = -1
+
+		for key := range keyChan {
+			if key == MLFlowUserTag {
+				return "Changing or removing the mlflow.user tag is not permitted in multi-tenant mode, please contact an administrator", nil
 			}
+		}
+	}
+
+	return "", nil
+}
+
+func (p *ProxyState) MutateRequest(w http.ResponseWriter, req *http.Request, path string, requestID string, subject string, token *jwt.Token) (rejectMsg string, err error) {
+	if strings.HasPrefix(path, MLFlowAPIPrefix) {
+		// The --static-prefix flag does not apply to the API, so we must manually trim it
+		req.URL.Path = path
+		apiPath := strings.TrimPrefix(path, MLFlowAPIPrefix)
+		rejectMsg, err := p.EnforceUserTagsAndFields(w, req, apiPath, requestID, subject, token)
+		if rejectMsg != "" || err != nil {
+			return rejectMsg, err
+		}
+	}
+
+	if strings.HasPrefix(path, MLFlowAJAXPrefix) {
+		apiPath := strings.TrimPrefix(path, MLFlowAJAXPrefix)
+		rejectMsg, err := p.EnforceUserTagsAndFields(w, req, apiPath, requestID, subject, token)
+		if rejectMsg != "" || err != nil {
+			return rejectMsg, err
 		}
 	}
 
@@ -657,12 +724,17 @@ func (p *ProxyState) Home(w http.ResponseWriter, req *http.Request, requestID st
 }
 
 func (p *ProxyState) Proxy(w http.ResponseWriter, r *http.Request, requestID string, token *jwt.Token) {
+	subject, err := p.GetSubject(token)
+	if err != nil {
+		p.InternalError(w, r, requestID, "determining subject", err)
+		return
+	}
 	tenant, subPath, err := p.ValidateRequest(w, r, requestID, token)
 	if err != nil {
 		p.InternalError(w, r, requestID, "evaluating policy", err)
 		return
 	}
-	rejectMsg, err := p.MutateRequest(w, r, subPath, requestID, token)
+	rejectMsg, err := p.MutateRequest(w, r, subPath, requestID, subject, token)
 	if err != nil {
 		p.InternalError(w, r, requestID, "mutating request", err)
 		return
