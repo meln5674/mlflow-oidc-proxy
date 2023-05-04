@@ -19,13 +19,16 @@ This server is 100% stateless, meaning multiple replicas can be deployed and loa
 
 Needed tools:
 
-* Go 1.16+ (1.18+ for running integration tests)
+* Go 1.19+
 * Docker (Or compatible OCI image builder tool) (if building docker image)
-* Kubectl, Helm, Kind (For running integration tests)
+* Kubectl, Helm, Kind (If running end-to-end tests)
 
+### Build Executable
 ```bash
-# Executable
-go build -o proxy main.go
+make bin/mlflow-oidc-proxy
+```
+
+### Build Docker image
 # Docker image
 docker build -t ${your_registry}/meln5674/nexus-oidc-proxy:$(git rev-parse HEAD)
 docker push ${your_registry}/meln5674/nexus-oidc-proxy:$(git rev-parse HEAD)
@@ -82,6 +85,7 @@ oidc:
   # If the access should be denied, it must produce an error message (Or an HTML document with that 
   # error message) explaining the reason.
   # If the result is entirely whitespace (or empty), access is granted.
+  # See https://pkg.go.dev/text/template for syntax
   # 
   # Variables provided:
   # .Token: See https://pkg.go.dev/github.com/golang-jwt/jwt/v4#section-readme
@@ -90,8 +94,19 @@ oidc:
   # 
   # The default policy checks if a user has a Keycloak realm role matching the ID of the tenant
   # in question, and allows all requests if they do
-  rbacPolicy: |-
+  policy: |-
     <template>
+
+  # A go template which extracts the "subject" (user) from a token. This value will injected as
+  # the user_id field and mlflow.user tag. It is an error for this template to return an empty string.
+  # See https://pkg.go.dev/text/template for syntax
+  #
+  # Variables provided:
+  # .Token: See https://pkg.go.dev/github.com/golang-jwt/jwt/v4#section-readme
+  #
+  # The default extractor uses the keycloak preferred_username claim
+  getSubject: |-
+    <template> 
 ```
 
 ### Environment Variables
@@ -106,7 +121,7 @@ Specify path the configuration file described above
 
 ### Trusted Certificates
 
-If your MLFLow server use self-signed certificates or an internal certificate authority, this server must be set to trust them. This server is written in Go and uses [the standard locations](https://go.dev/src/crypto/x509/root_linux.go) for finding CA Certificate Bundles. Add your self-signed certificate or internal CA to one of these bundles to trust them.
+If your MLFLow servers use self-signed certificates or an internal certificate authority, this server must be set to trust them. This server is written in Go and uses [the standard locations](https://go.dev/src/crypto/x509/root_linux.go) for finding CA Certificate Bundles. Add your self-signed certificate or internal CA to one of these bundles to trust them.
 
 ### MLFlow Setup
 
@@ -121,14 +136,32 @@ As well, each tenant tracking server must be using their own isolated backend st
 
 While techinically not required, it is highly recommened to also pass `--serving-artifacts` so that details of the artifact stores do not need to be distributed to tenants.
 
-### Deploying
+## Deploying
 
-It is recommended to deploy this tool containerized, in a Kubernetes Cluster. A Dockerfile and [Helm chart](./deploy/helm/mlflow-oidc-proxy) are provided for doing so. An all-in-one chart capable of deploying a secure, resilient multi-tenant setup from scratch is provided [here](./deploy/helm/mlflow-multitenant).
+Because of the number of moving parts for a highly-available, reslient, multi-tenant deployment of MLFlow, it is highly recommended to use Kubernetes.
 
-See [here](./integration-test) for an example of this tool in action.
 
-### Running Tests
+
+## Running Tests
+
+### Unit Tests
 
 ```bash
-./integration-test/run.sh
+# This will open a new browser tab with the coverage report
+make show-coverage
+# This will just run the tests
+make coverprofile.out
+```
+
+### End-to-End Tests
+
+```bash
+# This will deploy a local KinD cluster, deploy a complete multi-tenant setup in two ways:
+# * First, using the standalone chart
+# * Second, using the omnibus chart
+# Along with a jupyterhub instance, and execute a test notebook which trains a set of models,
+# picks the best one, and then performs a REST request against a temporary server using that
+# best model.
+# This takes a substantial amount of time (~20m)
+make e2e
 ```
