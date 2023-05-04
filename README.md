@@ -10,7 +10,7 @@ This proxy is intended to be used with a separate MLFlow Tracking Server per "te
 
 This server proxies all of the tenant tracking servers, and applies a user-provided policy document that determines, based on the user's OIDC claims and the URL they are requesting, to forward or reject the request. This server does not implement OIDC itself, and instead expects itself to be proxied by another server, such as [this one](https://github.com/oauth2-proxy/oauth2-proxy), to provide it the user's JWT.
 
-For using the tracking server web browser UI, OIDC is handled as normal. For API access, the user is expected to provide a "Direct Grant"-type OIDC client so that tenants are able to provide a JWT as a bearer token.
+For using the tracking server web browser UI, OIDC is handled as normal. For API access, the user is responsible for configuring their SSO provider and authenticating proxy to provide token support. See [this fork](https://github.com/meln5674/oauth2-proxy) of OAuth2 Proxy for an example of doing this using OAuth2 offline access tokens.
 
 This server is 100% stateless, meaning multiple replicas can be deployed and load-balanced without additional configuration.
 
@@ -24,11 +24,14 @@ Needed tools:
 * Kubectl, Helm, Kind (If running end-to-end tests)
 
 ### Build Executable
+
 ```bash
 make bin/mlflow-oidc-proxy
 ```
 
 ### Build Docker image
+
+```bash
 # Docker image
 docker build -t ${your_registry}/meln5674/nexus-oidc-proxy:$(git rev-parse HEAD)
 docker push ${your_registry}/meln5674/nexus-oidc-proxy:$(git rev-parse HEAD)
@@ -121,7 +124,7 @@ Specify path the configuration file described above
 
 ### Trusted Certificates
 
-If your MLFLow servers use self-signed certificates or an internal certificate authority, this server must be set to trust them. This server is written in Go and uses [the standard locations](https://go.dev/src/crypto/x509/root_linux.go) for finding CA Certificate Bundles. Add your self-signed certificate or internal CA to one of these bundles to trust them.
+If your MLFLow servers use self-signed certificates or an internal certificate authority, this server must be set to trust them. This server is written in Go and uses [the standard locations](https://go.dev/src/crypto/x509/root_linux.go) for finding CA Certificate Bundles. Add your self-signed certificate or internal CA to one of these bundles to trust them. The provided Dockerfile copies the certificates from the stage that is used to build it.
 
 ### MLFlow Setup
 
@@ -138,11 +141,16 @@ While techinically not required, it is highly recommened to also pass `--serving
 
 ## Deploying
 
-Because of the number of moving parts for a highly-available, reslient, multi-tenant deployment of MLFlow, it is highly recommended to use Kubernetes.
+Because of the number of moving parts required for a highly-available, reslient, multi-tenant deployment of MLFlow, it is highly recommended to use Kubernetes.
+
+You have three major options for deploying:
+
+1. Deploy all infrastructure yourself, either on bare metal or using the provided dockerfile
+2. Deploy the proxy using the [standalone helm chart](./deploy/helm/mlflow-oidc-proxy)
+3. Deploy an ["all-in-one" chart](./deploy/helm/mlflow-multitenant) that contains all components needed to go from zero to a secure, highly available, resilient, multitenant MLFlow deployment.
 
 
-
-## Running Tests
+## Development
 
 ### Unit Tests
 
