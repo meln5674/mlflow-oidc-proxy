@@ -1,8 +1,5 @@
 {{- $dot := . }}
 
-{{- $keycloakDot := .Subcharts.keycloak }}
-{{- $keycloakDot = set $keycloakDot "Template" .Template }}
-{{- $keycloakDot = set $keycloakDot "Values" .Values.keycloak }}
 
 {{- if .Values.certManagerCerts.enabled }}
 {{- if not .Values.certManagerCerts.existingIssuer.name }}
@@ -40,6 +37,9 @@ spec:
 {{- end }}
 
 {{- if and .Values.keycloak.enabled .Values.keycloak.ingress.enabled }}
+{{- $keycloakDot := .Subcharts.keycloak }}
+{{- $keycloakDot = set $keycloakDot "Template" .Template }}
+{{- $keycloakDot = set $keycloakDot "Values" .Values.keycloak }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
