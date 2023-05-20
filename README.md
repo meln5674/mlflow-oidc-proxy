@@ -79,10 +79,18 @@ mlflow:
     upstream: http[s]://<host>:<port>[/<base path>]
 # OIDC authentication/authorization configuration
 oidc:
-  # Name of the HTTP header to expect the downstream proxy to set to the JWT OIDC Access token 
+  # How to extract the JWT token from a request
+  # raw: Extract a raw header value (see tokenHeader)
+  # bearer: Extract the token using Bearer scheme authentication
+  # basic-user: Extract the token using the username from Basic scheme authentication (password is ignored)
+  # basic-password: Extract the token using the password from Basic scheme authentication (username is ignored)
+  tokenMode: raw|bearer|basic-user|basic-password
+
+  # Name of the HTTP header to use when using the 'raw' token mode (see tokenMode).
+  # Ignored if not using the raw token mode.
   # Defaults to X-Forwarded-Access-Token,
   # which is provided by OAuth2Proxy using --pass-access-token flag
-  accessTokenHeader: <header name> 
+  tokenHeader: <header name>
 
   # A go template which validates that a user is allowed to perform a request within a tenant.
   # If the access should be denied, it must produce an error message (Or an HTML document with that 

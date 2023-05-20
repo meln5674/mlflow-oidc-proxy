@@ -27,9 +27,11 @@ Forbidden: You are not part of this tenant
 	// DefaultTenantsPath is the default value of the config http.tenantsPath field.
 	// It assuems tenant servers have --static-prefix=tenants/${tenant_id}
 	DefaultTenantsPath = "/tenants/"
-	// DefaultAccessTokenHeader is the default value of the config oidc.accessTokenHeader.
+	// DefaultAccessTokenHeader is the default value of the config oidc.tokenHeader.
 	// It assumes the server is being proxied by the OAuth2Proxy (https://github.com/oauth2-proxy/oauth2-proxy/) with --pass-access-token
-	DefaultAccessTokenHeader = "X-Forwarded-Access-Token"
+	DefaultTokenHeader = "X-Forwarded-Access-Token"
+	// DefaulTokenMode is the default value of the config oidc.tokenMode.
+	DefaultTokenMode = TokenModeRaw
 )
 
 var (
@@ -130,10 +132,11 @@ func (t *Template) UnmarshalJSON(bytes []byte) error {
 }
 
 type ProxyOIDCConfig struct {
-	AccessTokenHeader string   `json:"accessTokenHeader"`
-	WellKnownURL      URL      `json:"wellKnownURL"`
-	Policy            Template `json:"policy"`
-	GetSubject        Template `json:"getSubject"`
+	TokenHeader  string    `json:"tokenHeader"`
+	TokenMode    TokenMode `json:"tokenMode"`
+	WellKnownURL URL       `json:"wellKnownURL"`
+	Policy       Template  `json:"policy"`
+	GetSubject   Template  `json:"getSubject"`
 }
 
 type ProxyMLFlowTenant struct {
@@ -171,8 +174,12 @@ func (p *ProxyConfig) Init() *ProxyConfig {
 }
 
 func (p *ProxyConfig) ApplyDefaults() (err error) {
-	if p.OIDC.AccessTokenHeader == "" {
-		p.OIDC.AccessTokenHeader = DefaultAccessTokenHeader
+	if p.OIDC.TokenHeader == "" {
+		p.OIDC.TokenHeader = DefaultTokenHeader
+	}
+
+	if p.OIDC.TokenMode == "" {
+		p.OIDC.TokenMode = DefaultTokenMode
 	}
 
 	if p.OIDC.Policy.Raw == "" {

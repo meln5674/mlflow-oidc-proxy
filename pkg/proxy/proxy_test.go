@@ -132,7 +132,7 @@ func (p *proxySpecState) addBadTokenTests() {
 	When("the token is malformed", func() {
 		BeforeEach(func() {
 			p.skipToken = true
-			p.headers[proxy.DefaultAccessTokenHeader] = "asdfasdfasdf"
+			p.headers[proxy.DefaultTokenHeader] = "asdfasdfasdf"
 		})
 		It("should return 400", func() {
 			p.expectCode(http.StatusBadRequest)
@@ -255,7 +255,7 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 			}
 			token, err := jwt.NewWithClaims(tokenSigner, allClaims).SignedString(tokenKey)
 			Expect(err).ToNot(HaveOccurred())
-			s.req.Header.Add(proxy.DefaultAccessTokenHeader, token)
+			s.req.Header.Add(proxy.DefaultTokenHeader, token)
 		}
 
 		GinkgoWriter.Printf("Executing request\n")

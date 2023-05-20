@@ -23,13 +23,16 @@ var _ = Describe("Config", func() {
 			Expect(config.HTTP.TenantsPath).To(Equal(proxy.DefaultTenantsPath))
 			Expect(config.MLFlow.Tenants).To(HaveLen(0))
 			Expect(config.TLS.Enabled).To(BeFalse())
-			Expect(config.OIDC.AccessTokenHeader).To(Equal(proxy.DefaultAccessTokenHeader))
+			Expect(config.OIDC.TokenHeader).To(Equal(proxy.DefaultTokenHeader))
+			Expect(config.OIDC.TokenMode).To(Equal(proxy.DefaultTokenMode))
 		})
 	})
 
 	When("parsing a complete JSON document", func() {
 		BeforeEach(func() {
 			config = new(proxy.ProxyConfig).Init()
+			// This doc's tokenHeader/Mode is not actually a valid combination,
+			// but we are just testing if it parses something other than the default
 			Expect(json.Unmarshal([]byte(`
 				{
 					"http": {
@@ -57,8 +60,9 @@ var _ = Describe("Config", func() {
 						"keyFile": "baz/qux.key"
 					},
 					"oidc": {
-						"accessTokenHeader": "X-My-Custom-Header",
-						"policy": "{{ eq 1 2 }}"
+						"policy": "{{ eq 1 2 }}",
+						"tokenHeader": "X-My-Custom-Header",
+						"tokenMode": "bearer"
 					}
 				}
 			`), &config)).To(Succeed())
@@ -79,9 +83,9 @@ var _ = Describe("Config", func() {
 			Expect(config.TLS.Enabled).To(BeTrue())
 			Expect(config.TLS.CertFile).To(Equal("/foo/bar.crt"))
 			Expect(config.TLS.KeyFile).To(Equal("baz/qux.key"))
-			Expect(config.OIDC.AccessTokenHeader).To(Equal("X-My-Custom-Header"))
+			Expect(config.OIDC.TokenHeader).To(Equal("X-My-Custom-Header"))
+			Expect(config.OIDC.TokenMode).To(Equal(proxy.TokenModeBearer))
 			Expect(config.OIDC.Policy.Raw).To(Equal("{{ eq 1 2 }}"))
-
 		})
 	})
 
