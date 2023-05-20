@@ -19,13 +19,6 @@ import (
 )
 
 const (
-	// HeaderAuthorization is the name of the header to obtain the bearer token from
-	HeaderAuthorization = "Authorization"
-	// HeaderAuthorizationBearerPrefix is the prefix to the Authorization header if it contains a bearer token
-	HeaderAuthorizationBearerPrefix = "Bearer "
-)
-
-const (
 	MLFlowUserTag     = "mlflow.user"
 	MLFlowUserIDField = "user_id"
 	MLFlowTagsField   = "tags"
@@ -120,7 +113,8 @@ type ProxyState struct {
 	Tenants map[string]*ProxyTenantState
 	BaseURL *url.URL
 	*http.ServeMux
-	Log *log.Logger
+	Log      *log.Logger
+	GetToken TokenGetter
 
 	HomeURL        string
 	BasePath       string
@@ -183,6 +177,11 @@ func NewProxy(config ProxyConfig, opts ProxyOptions) (*ProxyState, error) {
 	state.TenantsPath = WithoutTrailingSlash(JoinPaths(state.BaseURL.Path, config.HTTP.TenantsPath))
 	// We want the healthcheck endpoint to be acessible both externally and internally
 	state.LongHealthPath = JoinPaths(state.BaseURL.Path, "/health")
+	var ok bool
+	state.GetToken, ok = GetTokenGetter(config.OIDC.TokenMode, config.OIDC.TokenHeader)
+	if !ok {
+		return nil, fmt.Errorf("Invalid token mode: %s", config.OIDC.TokenMode)
+	}
 	return state, nil
 }
 
@@ -451,25 +450,18 @@ func (p *ProxyState) MutateRequest(w http.ResponseWriter, req *http.Request, pat
 	return "", nil
 }
 
-func (p *ProxyState) GetAccessToken(r *http.Request) (string, bool) {
-	token, ok := r.Header[p.Config.OIDC.AccessTokenHeader]
-	if !ok || len(token) == 0 || len(token[0]) == 0 {
-		return "", false
-	}
-	return token[0], true
-}
-
 func (p *ProxyState) ExtractClaims(r *http.Request) (token *jwt.Token, hasToken bool, err error) {
-	accessToken, hasAccessToken := p.GetAccessToken(r)
-	if !hasAccessToken {
-		return nil, false, fmt.Errorf("No access or bearer token present")
+	tokenString := p.GetToken(r)
+	if tokenString == "" {
+		return nil, false, fmt.Errorf("No token present")
 	}
-	hasToken = true
-	tokenString := accessToken
 	claims := make(jwt.MapClaims)
 	// TODO: Deal with signature
 	token, _, err = jwt.NewParser().ParseUnverified(tokenString, claims)
-	return
+	if err != nil {
+		return nil, true, err
+	}
+	return token, true, nil
 }
 
 func (p *ProxyState) MergeURLs(dest, src *url.URL) {
