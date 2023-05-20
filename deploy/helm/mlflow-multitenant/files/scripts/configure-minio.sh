@@ -70,6 +70,11 @@ while read -r user access_key bucket ; do
     policy="${user}"
     if ! mc admin policy info "${ALIAS}" "${policy}" ; then
         policy-for-bucket "${bucket}" | mc admin policy create "${ALIAS}" "${policy}" /dev/stdin
+
+        while ! mc admin policy info "${ALIAS}" "${policy}" ; do
+            echo "Waiting for policy visibility..."
+            sleep 5
+        done
     fi
     if ! mc admin policy entities "${ALIAS}" --user "${access_key}" | grep -v 'User:' | grep "${policy}"; then 
         mc admin policy attach "${ALIAS}" "${policy}" --user "${access_key}"
