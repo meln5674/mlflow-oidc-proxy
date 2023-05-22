@@ -10,10 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"github.com/meln5674/gingk8s"
 	"github.com/meln5674/gosh"
-	"github.com/onsi/biloba"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -23,9 +21,13 @@ func TestMlflowOidcProxy(t *testing.T) {
 	RunSpecs(t, "mlflow-oidc-proxy Suite")
 }
 
-var b *biloba.Biloba
-
-var gk8s gingk8s.Gingk8s
+var (
+	gk8s                   gingk8s.Gingk8s
+	clusterID              gingk8s.ClusterID
+	mlflowOIDCProxyImageID gingk8s.CustomImageID
+	jupyterhubImageID      gingk8s.CustomImageID
+	oauth2ProxyImageID     gingk8s.ThirdPartyImageID
+)
 
 var _ = BeforeSuite(func(ctx context.Context) {
 	var err error
@@ -38,178 +40,25 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	dummyIngress, err = os.ReadFile("integration-test/dummy-ingress.yaml")
 	Expect(err).ToNot(HaveOccurred())
 
-	mlflowOIDCProxyImageID := gk8s.CustomImage(&mlflowOIDCProxyImage)
+	mlflowOIDCProxyImageID = gk8s.CustomImage(&mlflowOIDCProxyImage)
 
-	jupyterhubImageID := gk8s.CustomImage(&jupyterhubImage)
+	jupyterhubImageID = gk8s.CustomImage(&jupyterhubImage)
 
-	oauth2ProxyImageID := gk8s.ThirdPartyImage(&oauth2ProxyImage)
+	oauth2ProxyImageID = gk8s.ThirdPartyImage(&oauth2ProxyImage)
 
-	clusterID := gk8s.Cluster(&cluster,
+	clusterID = gk8s.Cluster(&cluster,
 		mlflowOIDCProxyImageID, jupyterhubImageID,
 		oauth2ProxyImageID, // TODO: Add third party images for everything else
 	)
 
+	gk8s.Release(clusterID, &kubeIngressProxy) // , ingressNginxID)
+
 	gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
-
-	if false {
-
-		certManagerID := gk8s.Release(clusterID, &certManager)
-
-		certsID := gk8s.Manifests(clusterID, &certs, certManagerID)
-
-		ingressNginxID := gk8s.Release(clusterID, &ingressNginx, certsID)
-
-		waitForIngressWebhookID := gk8s.ClusterAction(
-			clusterID,
-			"Wait for Ingress Webhook",
-			gingk8s.ClusterAction(waitForIngressWebhook),
-			ingressNginxID,
-		)
-
-		kubeIngressProxyID := gk8s.Release(clusterID, &kubeIngressProxy, ingressNginxID)
-
-		postgresOperatorID := gk8s.Release(clusterID, &postgresOperator, certsID)
-
-		postgresID := gk8s.Manifests(clusterID, &postgres, postgresOperatorID)
-
-		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", postgresSecretsReady, nil)
-
-		minioID := gk8s.Release(clusterID, &minio)
-
-		mlflowIDs := []gingk8s.ReleaseID{
-			gk8s.Release(clusterID, &mlflow[0],
-				minioID,
-				postgresID,
-				postgresSecretsReadyID,
-			),
-			gk8s.Release(clusterID, &mlflow[1], minioID,
-				postgresID,
-				postgresSecretsReadyID,
-			),
-		}
-
-		keycloakID := gk8s.Release(clusterID, &keycloak, postgresID, waitForIngressWebhookID)
-
-		keycloakSetupID := gk8s.ClusterAction(
-			clusterID,
-			"Create Keycloak Realm, Users, and Clients",
-			gingk8s.ClusterAction(keycloakSetup(
-				"keycloak-0",
-				"REALM=integration-test",
-				"KEYCLOAK_URL=https://keycloak.default.svc.cluster.local",
-			)),
-			keycloakID,
-		)
-
-		mlflowOIDCProxySetupID := gk8s.ClusterAction(clusterID,
-			"Generate MLFlow OIDC Proxy ConfigMap",
-			gingk8s.ClusterAction(mlflowOIDCProxySetup),
-		)
-
-		mlflowOIDCProxyConfigID := gk8s.Manifests(clusterID, &mlflowOIDCProxyConfig, mlflowOIDCProxySetupID)
-
-		mlflowOIDCProxyID := gk8s.Release(clusterID, &mlflowOIDCProxy,
-			mlflowOIDCProxySetupID,
-			mlflowOIDCProxyConfigID,
-			mlflowOIDCProxyImageID,
-		)
-
-		oauth2ProxySetupID := gk8s.ClusterAction(clusterID, "Generate OAuth2 Proxy ConfigMap", gingk8s.ClusterAction(oauth2ProxySetup))
-
-		oauth2ProxyConfigID := gk8s.Manifests(clusterID, &oauth2ProxyConfig,
-			oauth2ProxySetupID,
-			ingressNginxID,
-		)
-
-		oauth2ProxyID := gk8s.Release(clusterID, &oauth2Proxy,
-			keycloakID,
-			oauth2ProxyConfigID,
-			oauth2ProxyImageID,
-			keycloakSetupID, waitForIngressWebhookID,
-		)
-
-		jupyterhubID := gk8s.Release(clusterID, &jupyterhub,
-			keycloakID,
-			jupyterhubImageID,
-			keycloakSetupID, waitForIngressWebhookID, postgresSecretsReadyID,
-		)
-
-		_ = gingk8s.ResourceDependencies{
-			Releases: []gingk8s.ReleaseID{
-				kubeIngressProxyID,
-				jupyterhubID,
-				oauth2ProxyID,
-				mlflowOIDCProxyID,
-				mlflowIDs[0],
-				mlflowIDs[1],
-			},
-		}
-
-	} else {
-		mlflowDepsID := gk8s.Release(clusterID, &mlflowMultitenantDeps)
-
-		ingressNginxID := gk8s.Release(clusterID, &ingressNginx2) //	certsID,
-
-		waitForIngressWebhookID := gk8s.ClusterAction(clusterID, "Wait for Ingress Webhook", gingk8s.ClusterAction(waitForIngressWebhook), ingressNginxID)
-
-		kubeIngressProxyID := gk8s.Release(clusterID, &kubeIngressProxy, ingressNginxID)
-
-		mlflowID := gk8s.Release(clusterID, &mlflowMultitenant,
-			mlflowDepsID,
-			oauth2ProxyImageID,
-			mlflowOIDCProxyImageID,
-			waitForIngressWebhookID,
-		)
-
-		certsID := gk8s.Manifests(clusterID, &certsNoIssuer, mlflowDepsID, mlflowID)
-
-		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, mlflowID)
-
-		jupyterhubID := gk8s.Release(clusterID, &jupyterhub2,
-			mlflowID,
-			jupyterhubImageID,
-			waitForIngressWebhookID, postgresSecretsReadyID,
-		)
-
-		keycloakSetupID := gk8s.ClusterAction(
-			clusterID,
-			"Create Keycloak Realm, Users, and Clients",
-			gingk8s.ClusterAction(keycloakSetup(
-				"mlflow-multitenant-keycloak-0",
-				"REALM=mlflow-multitenant",
-				"USERS_ONLY=1",
-				"KEYCLOAK_URL=https://mlflow-multitenant-keycloak.default.svc.cluster.local",
-			)),
-			mlflowID,
-		)
-
-		_ = gingk8s.ResourceDependencies{
-			Releases: []gingk8s.ReleaseID{
-				kubeIngressProxyID,
-				jupyterhubID,
-				mlflowID,
-			},
-			Manifests: []gingk8s.ManifestsID{
-				certsID,
-			},
-			ClusterActions: []gingk8s.ClusterActionID{
-				keycloakSetupID,
-			},
-		}
-	}
 
 	gk8s.Options(gingk8s.SuiteOpts{
 		NoSuiteCleanup: true,
 	})
 	gk8s.Setup(ctx)
-
-	biloba.SpinUpChrome(GinkgoT(),
-		chromedp.ProxyServer("http://localhost:8080"),
-		chromedp.Flag("headless", false),
-		chromedp.Flag("ignore-certificate-errors", "1"),
-	)
-	b = biloba.ConnectToChrome(GinkgoT())
-	keycloakLogin(true)
 })
 
 var (
@@ -384,8 +233,22 @@ spec:
 		Set: gingk8s.Object{
 			"controllerAddresses[0].className": "nginx",
 			"controllerAddresses[0].address":   "ingress-nginx-controller.default.svc.cluster.local",
-			"hostPort.enabled":                 true,
 		},
+		NoWait: true,
+	}
+
+	restartKubeIngressProxy = gingk8s.ClusterAction(func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
+		return g.KubectlRollout(ctx, cluster, gingk8s.ResourceReference{
+			Name: "kube-ingress-proxy",
+			Kind: "ds",
+		}).Run()
+	})
+
+	portForwardKubeIngressProxy = &gingk8s.KubectlPortForwarder{
+		Kind:        "svc",
+		Name:        "kube-ingress-proxy",
+		Ports:       []string{"8080:80"},
+		RetryPeriod: 1 * time.Second,
 	}
 
 	postgresOperator = gingk8s.HelmRelease{
