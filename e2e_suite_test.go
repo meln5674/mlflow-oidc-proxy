@@ -32,7 +32,7 @@ var (
 var _ = BeforeSuite(func(ctx context.Context) {
 	var err error
 
-	gk8s = gingk8s.ForSuite()
+	gk8s = gingk8s.ForSuite(GinkgoT())
 
 	keycloakSetupScript, err = os.ReadFile("integration-test/keycloak-setup.sh")
 	Expect(err).ToNot(HaveOccurred())
@@ -56,7 +56,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
 
 	gk8s.Options(gingk8s.SuiteOpts{
-		NoSuiteCleanup: true,
+		// NoSuiteCleanup: true,
 	})
 	gk8s.Setup(ctx)
 })
@@ -233,6 +233,7 @@ spec:
 		Set: gingk8s.Object{
 			"controllerAddresses[0].className": "nginx",
 			"controllerAddresses[0].address":   "ingress-nginx-controller.default.svc.cluster.local",
+			"hostPort.enabled":                 "true",
 		},
 		NoWait: true,
 	}
@@ -243,13 +244,6 @@ spec:
 			Kind: "ds",
 		}).Run()
 	})
-
-	portForwardKubeIngressProxy = &gingk8s.KubectlPortForwarder{
-		Kind:        "svc",
-		Name:        "kube-ingress-proxy",
-		Ports:       []string{"8080:80"},
-		RetryPeriod: 1 * time.Second,
-	}
 
 	postgresOperator = gingk8s.HelmRelease{
 		Name: "postgres-operator",
@@ -502,7 +496,11 @@ spec:
 			},
 		},
 		ValuesFiles:  []string{"deploy/helm/mlflow-multitenant/values.yaml"},
-		UpgradeFlags: []string{"--wait-for-jobs"},
+		UpgradeFlags: []string{"--wait-for-jobs", "--timeout=15m"},
+		SetFile: gingk8s.StringObject{
+			"oauth2-proxy.configuration.content": "integration-test/cases/refresh_access/oauth2_proxy.cfg",
+			"mlflow-oidc-proxy.config.content":   "integration-test/cases/refresh_access/mlflow-oidc-proxy.cfg",
+		},
 		Set: gingk8s.Object{
 			"keycloak.ingress.enabled":              true,
 			"keycloak.ingress.ingressClassName":     "nginx",
@@ -714,7 +712,7 @@ data:
   oauth2_proxy.cfg: |
 `))
 
-	fCfg, err := os.Open("integration-test/oauth2_proxy.cfg")
+	fCfg, err := os.Open("integration-test/cases/access_id/oauth2_proxy.cfg")
 	if err != nil {
 		return err
 	}
@@ -749,7 +747,7 @@ data:
   mlflow-oidc-proxy.cfg: |
 `))
 
-	fCfg, err := os.Open("integration-test/mlflow-oidc-proxy.cfg")
+	fCfg, err := os.Open("integration-test/cases/access_id/mlflow-oidc-proxy.cfg")
 	if err != nil {
 		return err
 	}
