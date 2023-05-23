@@ -80,6 +80,7 @@ affinity: {}
 config:
   existingConfigMap:
     name: ''
+    key: mlflow-oidc-proxy.cfg
   yaml:
     http:
       # Address and port to listen on
