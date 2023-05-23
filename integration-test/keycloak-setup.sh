@@ -65,6 +65,31 @@ while read -r client_id callback ; do
         | sed -E 's/.*"value" : "([^"]+)".*/\1/' \
         | tee /dev/stderr \
         > "/tmp/client-secrets/${client_id}"
+
+    roles_scope_id="$(kcadm.sh get client-scopes \
+        --format csv \
+        -r "${REALM}" \
+        -F name,id \
+        | tee /dev/stderr \
+        | grep -E '^"roles",' \
+        | tee /dev/stderr \
+        | sed -E 's/^"roles","([^"]+)"/\1/g' \
+        | tee /dev/stderr
+    )"
+    roles_mapper_id="$(kcadm.sh get "client-scopes/${roles_scope_id}/protocol-mappers/models" \
+        --format csv \
+        -r "${REALM}" \
+        -F name,id \
+        | tee /dev/stderr \
+        | grep -E '^"realm roles",' \
+        | tee /dev/stderr \
+        | sed -E 's/^"realm roles","([^"]+)"/\1/g' \
+        | tee /dev/stderr
+    )"
+    kcadm.sh update "client-scopes/${roles_scope_id}/protocol-mappers/models/${roles_mapper_id}" \
+        -r "${REALM}" \
+        -s 'config."id.token.claim"=true'
+
 done <<EOF
 jupyterhub hub/oauth_callback
 mlflow oauth2/callback

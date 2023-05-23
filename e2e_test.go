@@ -216,7 +216,7 @@ func (s *subSuite) keycloakLogin(needCredentials bool) {
 func (s *subSuite) sessionSetup() {
 	biloba.SpinUpChrome(GinkgoT(),
 		chromedp.ProxyServer("http://localhost:8080"),
-		chromedp.Flag("headless", false),
+		//chromedp.Flag("headless", false),
 		chromedp.Flag("ignore-certificate-errors", "1"),
 	)
 	s.b = biloba.ConnectToChrome(GinkgoT())
@@ -243,7 +243,10 @@ func (s *subSuite) cases() {
 			// There doesn't seem to be any obvious element whose existence indicates the browser is actually finished loading
 			time.Sleep(15 * time.Second)
 			rootFolderButton := ".jp-BreadCrumbs-home"
-			Eventually(rootFolderButton).Should(b.Exist())
+			Eventually(rootFolderButton, "5s").Should(b.Exist())
+			// When running headless, for whatever reason,
+			// the button doesn't immediately generate a layout, which causes the scrollIntoView to fail
+			time.Sleep(15 * time.Second)
 			s.mouseClick(rootFolderButton, chromedp.ButtonLeft)
 			folder := `.jp-BreadCrumbs [title="mlflow-example"]`
 			Eventually(folder).ShouldNot(b.Exist())
@@ -351,7 +354,7 @@ func (s *subSuite) cases() {
 				output := codeCellOutputFmt(ix)
 				Eventually(output).Should(b.Exist())
 				b.InvokeOn(output, "scrollIntoView")
-				Eventually(func() string { return b.InnerText(prompt) }, "5m").ShouldNot(Equal("[*]:"))
+				Eventually(func() string { return b.InnerText(prompt) }, "20m").ShouldNot(Equal("[*]:"))
 			}
 
 			By("Parsing the final cell's output as JSON")
@@ -395,7 +398,7 @@ func (s *subSuite) cases() {
 	})
 }
 
-var _ = PDescribe("Standalone setup", Ordered, func() {
+var _ = Describe("Standalone setup", Ordered, func() {
 	s := subSuite{}
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
@@ -406,16 +409,11 @@ var _ = PDescribe("Standalone setup", Ordered, func() {
 
 		ingressNginxID := gk8s.Release(clusterID, &ingressNginx, certsID)
 
-		kubeIngressProxyID := gk8s.ClusterAction(
+		gk8s.ClusterAction(
 			clusterID,
 			"Restart kube ingress proxy",
 			restartKubeIngressProxy,
 			ingressNginxID,
-		)
-
-		gk8s.ClusterAction(clusterID, "Port forward kube ingress proxy",
-			portForwardKubeIngressProxy,
-			kubeIngressProxyID,
 		)
 
 		waitForIngressWebhookID := gk8s.ClusterAction(
@@ -429,7 +427,7 @@ var _ = PDescribe("Standalone setup", Ordered, func() {
 
 		postgresID := gk8s.Manifests(clusterID, &postgres, postgresOperatorID)
 
-		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", postgresSecretsReady, nil)
+		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", postgresSecretsReady)
 
 		minioID := gk8s.Release(clusterID, &minio)
 
@@ -517,16 +515,11 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 
 		ingressNginxID := gk8s.Release(clusterID, &ingressNginx2) //	certsID,
 
-		kubeIngressProxyID := gk8s.ClusterAction(
+		gk8s.ClusterAction(
 			clusterID,
 			"Restart kube ingress proxy",
 			restartKubeIngressProxy,
 			ingressNginxID,
-		)
-
-		gk8s.ClusterAction(clusterID, "Port forward kube ingress proxy",
-			portForwardKubeIngressProxy,
-			kubeIngressProxyID,
 		)
 
 		waitForIngressWebhookID := gk8s.ClusterAction(clusterID, "Wait for Ingress Webhook", gingk8s.ClusterAction(waitForIngressWebhook), ingressNginxID)
