@@ -1,10 +1,13 @@
 package proxy
 
 import (
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"html/template"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/Masterminds/sprig"
@@ -32,6 +35,8 @@ Forbidden: You are not part of this tenant
 	DefaultTokenHeader = "X-Forwarded-Access-Token"
 	// DefaulTokenMode is the default value of the config oidc.tokenMode.
 	DefaultTokenMode = TokenModeRaw
+	// DefaultCerificate header is the default value of the config robots.certificateHeader
+	DefaultCertificateHeader = "ssl-client-cert"
 )
 
 var (
@@ -131,6 +136,39 @@ func (t *Template) UnmarshalJSON(bytes []byte) error {
 	return err
 }
 
+type CertificateFromPath struct {
+	Raw   string
+	PEM   string
+	Inner *x509.Certificate
+}
+
+func (c *CertificateFromPath) UnmarshalJSON(bytes []byte) error {
+	var path string
+	err := json.Unmarshal(bytes, &path)
+	if err != nil {
+		return err
+	}
+	pemBytes, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	der, rest := pem.Decode(pemBytes)
+	if der == nil {
+		return fmt.Errorf("No PEM data found in file %s", path)
+	}
+	if len(rest) != 0 {
+		return fmt.Errorf("Trailing data after PEM certificate in file %s", path)
+	}
+	cert, err := x509.ParseCertificate(der.Bytes)
+	if err != nil {
+		return err
+	}
+	c.Raw = path
+	c.Inner = cert
+	c.PEM = string(pemBytes)
+	return nil
+}
+
 type ProxyOIDCConfig struct {
 	TokenHeader  string    `json:"tokenHeader"`
 	TokenMode    TokenMode `json:"tokenMode"`
@@ -155,9 +193,15 @@ type ProxyHTTPConfig struct {
 }
 
 type ProxyTLSConfig struct {
-	Enabled  bool   `json:"enabled"`
-	CertFile string `json:"certFile"`
-	KeyFile  string `json:"keyFile"`
+	Enabled    bool   `json:"enabled"`
+	CertFile   string `json:"certFile"`
+	KeyFile    string `json:"keyFile"`
+	Terminated bool   `json:"terminated"`
+}
+
+type ProxyRobotConfig struct {
+	CertificateHeader string  `json:"certificateHeader"`
+	Robots            []Robot `json:"robots"`
 }
 
 type ProxyConfig struct {
@@ -165,6 +209,7 @@ type ProxyConfig struct {
 	MLFlow ProxyMLFlowConfig `json:"mlflow"`
 	HTTP   ProxyHTTPConfig   `json:"http"`
 	TLS    ProxyTLSConfig    `json:"tls"`
+	Robots ProxyRobotConfig  `json:"robots"`
 }
 
 func (p *ProxyConfig) Init() *ProxyConfig {
@@ -204,6 +249,10 @@ func (p *ProxyConfig) ApplyDefaults() (err error) {
 
 	if p.HTTP.TenantsPath == "" {
 		p.HTTP.TenantsPath = DefaultTenantsPath
+	}
+
+	if p.Robots.CertificateHeader == "" {
+		p.Robots.CertificateHeader = DefaultCertificateHeader
 	}
 
 	return nil

@@ -2,14 +2,16 @@
 vet: go vet ./...
 
 TEST_SUITES ?= ./pkg/proxy
-TEST_FLAGS ?= --race --trace
+TEST_FLAGS ?= --race --trace -p
 
 E2E_TEST_SUITES ?= ./
 E2E_TEST_FLAGS ?= --race --trace -v
 
-.PHONY: coverprofile.out
 coverprofile.out: deps
 	bin/ginkgo run --cover --coverpkg=./,./pkg/proxy/ $(TEST_FLAGS) $(TEST_SUITES)
+
+.PHONY: test
+test: coverprofile.out
 
 .PHONY: show-coverage
 show-coverage: coverprofile.out

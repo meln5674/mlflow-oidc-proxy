@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -113,8 +114,9 @@ type ProxyState struct {
 	Tenants map[string]*ProxyTenantState
 	BaseURL *url.URL
 	*http.ServeMux
-	Log      *log.Logger
-	GetToken TokenGetter
+	Log          *log.Logger
+	GetToken     TokenGetter
+	RobotsByCert map[string]Robot
 
 	HomeURL        string
 	BasePath       string
@@ -182,6 +184,15 @@ func NewProxy(config ProxyConfig, opts ProxyOptions) (*ProxyState, error) {
 	if !ok {
 		return nil, fmt.Errorf("Invalid token mode: %s", config.OIDC.TokenMode)
 	}
+	if len(config.Robots.Robots) != 0 && !config.TLS.Enabled && !config.TLS.Terminated {
+		return nil, fmt.Errorf("Robots require TLS. If this server has TLS terminated for it, set tls.terminated: true to silence this error")
+	}
+	state.RobotsByCert = make(map[string]Robot, len(config.Robots.Robots))
+	for _, robot := range config.Robots.Robots {
+		derBase64 := base64.StdEncoding.EncodeToString(robot.Cert.Inner.Raw)
+		state.RobotsByCert[derBase64] = robot
+	}
+
 	return state, nil
 }
 
@@ -281,12 +292,13 @@ func mutateJSON(r io.ReadCloser, f func(map[string]interface{}) error) (io.ReadC
 			}
 			errChan <- fmt.Errorf("%v", r)
 		}()
-		err := func() error {
-			var err error
-			err = json.NewDecoder(r).Decode(&v)
-			if err != nil {
-				return err
-			}
+		err := json.NewDecoder(r).Decode(&v)
+		if err != nil {
+			f(nil)
+			errChan <- err
+			return
+		}
+		err = func() error {
 			err = f(v)
 			if err != nil {
 				return err
@@ -308,6 +320,9 @@ func mutateJSON(r io.ReadCloser, f func(map[string]interface{}) error) (io.ReadC
 
 func setUserID(subject string) func(map[string]interface{}) error {
 	return func(body map[string]interface{}) error {
+		if body == nil {
+			return nil
+		}
 		body[MLFlowUserIDField] = subject
 		return nil
 	}
@@ -334,6 +349,9 @@ func setTagInList(tags []interface{}, key, value string) []interface{} {
 
 func setUserTag(subject string) func(map[string]interface{}) error {
 	return func(body map[string]interface{}) error {
+		if body == nil {
+			return nil
+		}
 		tags, ok := body[MLFlowTagsField].([]interface{})
 		if !ok {
 			tags = make([]interface{}, 0, 1)
@@ -345,6 +363,9 @@ func setUserTag(subject string) func(map[string]interface{}) error {
 
 func setUserValue(subject string) func(map[string]interface{}) error {
 	return func(body map[string]interface{}) error {
+		if body == nil {
+			return nil
+		}
 		if body["key"] == MLFlowUserTag {
 			body["value"] = subject
 		}
@@ -355,6 +376,9 @@ func setUserValue(subject string) func(map[string]interface{}) error {
 func peekKey(keyChan chan string) func(map[string]interface{}) error {
 	return func(body map[string]interface{}) error {
 		defer close(keyChan)
+		if body == nil {
+			return nil
+		}
 		rawKey, ok := body["key"]
 		if !ok {
 			return nil
@@ -453,7 +477,7 @@ func (p *ProxyState) MutateRequest(w http.ResponseWriter, req *http.Request, pat
 func (p *ProxyState) ExtractClaims(r *http.Request) (token *jwt.Token, hasToken bool, err error) {
 	tokenString := p.GetToken(r)
 	if tokenString == "" {
-		return nil, false, fmt.Errorf("No token present")
+		return nil, false, nil
 	}
 	claims := make(jwt.MapClaims)
 	// TODO: Deal with signature
@@ -576,18 +600,31 @@ func (p *ProxyState) EnsureRequestID(w http.ResponseWriter, req *http.Request) s
 
 func (p *ProxyState) EnsureToken(w http.ResponseWriter, req *http.Request, requestID string) *jwt.Token {
 	token, hasToken, err := p.ExtractClaims(req)
-	if !hasToken {
-		p.Log.Printf("No token present, your authentication proxy setup is broken (Request ID: %s): %v\n", requestID, err)
-		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(fmt.Sprintf("No token was provided, contact your administrator. Request ID %s", requestID)))
-		return nil
-
+	if !hasToken && err == nil {
+		p.Log.Printf("Looking for robot cert, https: %v\n", p.Config.TLS.Enabled)
+		robotCert, hasRobotCert, err2 := GetRobotCert(p.Config.Robots.CertificateHeader, p.Config.TLS.Enabled, req)
+		err = err2
+		if hasRobotCert && err == nil {
+			derBase64 := base64.StdEncoding.EncodeToString(robotCert.Raw)
+			robot, ok := p.RobotsByCert[derBase64]
+			if ok {
+				token = &robot.Token.Inner
+				hasToken = true
+			}
+		}
 	}
 	if err != nil {
 		p.Log.Printf("Got invalid token (Request ID: %s): %v\n", requestID, err)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("Invalid token. Request ID %s", requestID)))
 		return nil
+	}
+	if !hasToken || token == nil {
+		p.Log.Printf("No token present, your authentication proxy and/or tls termination setup is broken, or you provided an invalid robot certificate (Request ID: %s): %v\n", requestID, err)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(fmt.Sprintf("No token was provided, contact your administrator. Request ID %s", requestID)))
+		return nil
+
 	}
 	p.Log.Printf("%s token=%v\n", req.URL.String(), token.Claims)
 	return token

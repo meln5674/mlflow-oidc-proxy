@@ -25,6 +25,7 @@ var _ = Describe("Config", func() {
 			Expect(config.TLS.Enabled).To(BeFalse())
 			Expect(config.OIDC.TokenHeader).To(Equal(proxy.DefaultTokenHeader))
 			Expect(config.OIDC.TokenMode).To(Equal(proxy.DefaultTokenMode))
+			Expect(config.Robots.CertificateHeader).To(Equal(proxy.DefaultCertificateHeader))
 		})
 	})
 
@@ -63,6 +64,21 @@ var _ = Describe("Config", func() {
 						"policy": "{{ eq 1 2 }}",
 						"tokenHeader": "X-My-Custom-Header",
 						"tokenMode": "bearer"
+					},
+					"robots": {
+						"certificateHeader": "X-Another-Custom-Header",
+						"robots": [
+							{
+								"name": "robot-1",
+								"certPath": "../../integration-test/test-cert-1.pem",
+								"token": { "claim-1": "value-1", "claim-2": "value-2" }
+							},
+							{
+								"name": "robot-2",
+								"certPath": "../../integration-test/test-cert-2.pem",
+								"token": { "claim-3": "value-3", "claim-4": "value-4" }
+							}
+						]
 					}
 				}
 			`), &config)).To(Succeed())
@@ -86,6 +102,18 @@ var _ = Describe("Config", func() {
 			Expect(config.OIDC.TokenHeader).To(Equal("X-My-Custom-Header"))
 			Expect(config.OIDC.TokenMode).To(Equal(proxy.TokenModeBearer))
 			Expect(config.OIDC.Policy.Raw).To(Equal("{{ eq 1 2 }}"))
+			Expect(config.Robots.CertificateHeader).To(Equal("X-Another-Custom-Header"))
+			Expect(config.Robots.Robots).To(HaveLen(2))
+			Expect(config.Robots.Robots[0].Name).To(Equal("robot-1"))
+			// TODO: Verify certificate matches
+			Expect(config.Robots.Robots[0].Cert.Inner).ToNot(BeNil())
+			Expect(config.Robots.Robots[0].Token.Inner.Claims).To(HaveKeyWithValue("claim-1", "value-1"))
+			Expect(config.Robots.Robots[0].Token.Inner.Claims).To(HaveKeyWithValue("claim-2", "value-2"))
+			Expect(config.Robots.Robots[1].Name).To(Equal("robot-2"))
+			// TODO: Verify certificate matches
+			Expect(config.Robots.Robots[1].Cert.Inner).ToNot(BeNil())
+			Expect(config.Robots.Robots[1].Token.Inner.Claims).To(HaveKeyWithValue("claim-3", "value-3"))
+			Expect(config.Robots.Robots[1].Token.Inner.Claims).To(HaveKeyWithValue("claim-4", "value-4"))
 		})
 	})
 
