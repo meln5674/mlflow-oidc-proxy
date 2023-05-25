@@ -66,6 +66,8 @@ tls:
   certFile: </path/to/tls.crt>
   # Path to your TLS private key
   keyFile: </path/to/tls.key> 
+  # Set to true if another reverse proxy is terminating TLS (see robots below)
+  terminated: <true|false>
 # MLFlow tracking server configuration
 mlflow:
   tenants:
@@ -117,7 +119,23 @@ oidc:
   #
   # The default extractor uses the keycloak preferred_username claim
   getSubject: |-
-    <template> 
+    <template>
+# Robot accounts allow you to create fake users by assigning a static token to a TLS certificate 
+# Because robots are implemented using TLS, either tls.enabled or tls.terminated must be true
+robots:
+  # When serving over plaintext (e.g, when TLS is terminated by ingress), Check this header for the certificate. 
+  # Defaults to ssl-client-cert, which is the header used by kubernetes ingress-nginx.
+  certificateHeader: <Header-Name>
+  # Robot users
+  robots:
+    # The name of the robot. Arbitrary, but used in debugging printouts
+  - name: <name>
+    # The path to the TLS certificate to verify the robot user
+    certFile: </path/to/tls.crt>
+    # The token claims
+    token: 
+      <claim>: <value>
+      # ...
 ```
 
 ### Environment Variables
