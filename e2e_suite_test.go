@@ -26,7 +26,7 @@ var (
 	clusterID               gingk8s.ClusterID
 	mlflowOIDCProxyImageID  gingk8s.CustomImageID
 	jupyterhubImageID       gingk8s.CustomImageID
-	oauth2ProxyImageID      gingk8s.ThirdPartyImageID
+	oauth2ProxyImageID      gingk8s.CustomImageID
 	kubectlImageID          gingk8s.ThirdPartyImageID
 	keycloakImageID         gingk8s.ThirdPartyImageID
 	redisImageID            gingk8s.ThirdPartyImageID
@@ -41,6 +41,14 @@ var (
 var _ = BeforeSuite(func(ctx context.Context) {
 	var err error
 
+	// The oauth2-proxy dockerfile assumes it is being built by docker buildx,
+	// but we don't need that. Adding these two args at the top (and provding them
+	// in the image build) works around this
+	oauth2DockerfileBytes, err := os.ReadFile("modules/oauth2-proxy/Dockerfile")
+	Expect(err).ToNot(HaveOccurred())
+	oauth2Dockerfile := "ARG BUILDPLATFORM\nARG TARGETPLATFORM\n" + string(oauth2DockerfileBytes)
+	Expect(os.WriteFile("modules/oauth2-proxy/Dockerfile", []byte(oauth2Dockerfile), 0x755))
+
 	gk8s = gingk8s.ForSuite(GinkgoT())
 
 	keycloakSetupScript, err = os.ReadFile("integration-test/keycloak-setup.sh")
@@ -53,7 +61,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 
 	jupyterhubImageID = gk8s.CustomImage(&jupyterhubImage)
 
-	oauth2ProxyImageID = gk8s.ThirdPartyImage(&oauth2ProxyImage)
+	oauth2ProxyImageID = gk8s.CustomImage(&oauth2ProxyImage)
 
 	kubectlImageID = gk8s.ThirdPartyImage(kubectlImage)
 
@@ -323,7 +331,7 @@ spec:
 					Name: "zalando",
 					URL:  "https://opensource.zalando.com/postgres-operator/charts/postgres-operator",
 				},
-				Version: "1.9.0",
+				Version: "1.10.0",
 			},
 		},
 	}
@@ -525,9 +533,15 @@ spec:
 		ResourcePaths: []string{oauth2ProxyConfigMapPath},
 	}
 
-	oauth2ProxyImage = gingk8s.ThirdPartyImage{
-		Name:   "local.host/mlflow-oidc-proxy/oauth2-proxy:latest",
-		NoPull: true,
+	oauth2ProxyImage = gingk8s.CustomImage{
+		Registry:   "local.host/mlflow-oidc-proxy",
+		Repository: "oauth2-proxy",
+		Dockerfile: "modules/oauth2-proxy/Dockerfile",
+		ContextDir: "modules/oauth2-proxy",
+		BuildArgs: map[string]string{
+			"BUILDPLATFORM":  "linux/amd64",
+			"TARGETPLATFORM": "linux/amd64",
+		},
 	}
 
 	oauth2Proxy = gingk8s.HelmRelease{
@@ -558,7 +572,7 @@ spec:
 			"hostAliases[0].hostnames[0]":       "keycloak.mlflow-oidc-proxy-it.cluster",
 			"image.registry":                    "local.host",
 			"image.repository":                  "mlflow-oidc-proxy/oauth2-proxy",
-			"image.tag":                         "latest",
+			"image.tag":                         gingk8s.DefaultExtraCustomImageTags()[0],
 			"image.pullPolicy":                  "Never",
 		},
 	}
@@ -586,7 +600,7 @@ spec:
 			},
 		},
 		ValuesFiles:  []string{"deploy/helm/mlflow-multitenant/values.yaml"},
-		UpgradeFlags: []string{"--wait-for-jobs", "--timeout=15m"},
+		UpgradeFlags: []string{"--wait-for-jobs", "--timeout=30m"},
 		SetFile: gingk8s.StringObject{
 			"oauth2-proxy.configuration.content": "integration-test/cases/refresh_access/oauth2_proxy.cfg",
 			"mlflow-oidc-proxy.config.content":   "integration-test/cases/refresh_access/mlflow-oidc-proxy.cfg",

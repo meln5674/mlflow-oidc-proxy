@@ -1,0 +1,3 @@
+[submodule "modules/oauth2-proxy"]
+	path = modules/oauth2-proxy
+	url = git@github.com:meln5674/oauth2-proxy.git
