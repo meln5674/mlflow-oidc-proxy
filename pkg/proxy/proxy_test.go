@@ -316,26 +316,23 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 				Robots: []proxy.Robot{
 					{
 						Name: "robot-1",
+						Cert: proxy.CertificateFromPath{
+							Raw:   "dummy-cert-1.pem",
+							Inner: suiteCommonVars.RobotCerts[0],
+						},
 					},
 					{
 						Name: "robot-2",
+						Cert: proxy.CertificateFromPath{
+							Raw:   "dummy-cert-2.pem",
+							Inner: suiteCommonVars.RobotCerts[1],
+						},
 					},
 				},
 			},
 		}
-		Expect(err).ToNot(HaveOccurred())
-		cfg.Robots.Robots[0].Cert.Inner = suiteCommonVars.RobotCerts[0]
-		if len(cfg.Robots.Robots[0].Cert.Inner.Raw) == 0 {
-			panic("???")
-		}
 
 		Expect(json.Unmarshal([]byte(`{ "preferred_username": "robot-1", "realm_access": { "roles": [ "tenant-1" ] } }`), &cfg.Robots.Robots[0].Token)).To(Succeed())
-
-		cfg.Robots.Robots[1].Cert.Inner = suiteCommonVars.RobotCerts[1]
-		if len(cfg.Robots.Robots[1].Cert.Inner.Raw) == 0 {
-			panic("???")
-		}
-
 		Expect(json.Unmarshal([]byte(`{ "preferred_username": "robot-2", "realm_access": { "roles": [ "tenant-2" ] } }`), &cfg.Robots.Robots[1].Token)).To(Succeed())
 
 		Expect(cfg.ApplyDefaults()).To(Succeed())
