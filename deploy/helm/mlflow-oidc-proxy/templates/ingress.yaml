@@ -26,12 +26,12 @@ spec:
   {{- if and .Values.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
   ingressClassName: {{ .Values.ingress.className }}
   {{- end }}
-  {{- if or .Values.ingress.tls.secret .Values.ingress.extraTLS }}
+  {{- if or .Values.ingress.tls.secretName .Values.ingress.extraTLS }}
   tls:
-    {{- if .Values.ingress.tls.secret }}
+    {{- if .Values.ingress.tls.secretName }}
     - hosts:
-      - host: {{ .Values.ingress.hostname }}
-      secretName: {{ .Values.ingress.tls.secret }}
+      - {{ .Values.ingress.hostname }}
+      secretName: {{ .Values.ingress.tls.secretName }}
     {{- end }}
     {{- with .Values.ingress.extraTLS }}
     {{- . | toYaml | nindent 4 }}
@@ -42,8 +42,8 @@ spec:
       http:
         paths:
           - path: /
-            {{- if and .pathType (semverCompare ">=1.18-0" $.Capabilities.KubeVersion.GitVersion) }}
-            pathType: {{ .pathType }}
+            {{- if and .Values.ingress.pathType (semverCompare ">=1.18-0" $.Capabilities.KubeVersion.GitVersion) }}
+            pathType: {{ .Values.ingress.pathType }}
             {{- end }}
             backend:
               {{- if semverCompare ">=1.19-0" $.Capabilities.KubeVersion.GitVersion }}

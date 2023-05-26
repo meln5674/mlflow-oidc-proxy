@@ -1,0 +1,18 @@
+apiVersion: helm-hog.meln5674.github.com/v1alpha1
+Kind: Project
+
+partsDirs:
+- hog/parts
+
+variables:
+  tenants:
+    zero: []
+    one: ['single-tenant']
+    two: ['two-tenants']
+    three: ['three-tenants']
+    ten: ['ten-tenants']
+  robots:
+    off: []
+    static: ['static-robots']
+    dynamic: ['dynamic-robots']
+    both: ['both-robots']

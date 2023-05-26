@@ -22,11 +22,20 @@ func TestMlflowOidcProxy(t *testing.T) {
 }
 
 var (
-	gk8s                   gingk8s.Gingk8s
-	clusterID              gingk8s.ClusterID
-	mlflowOIDCProxyImageID gingk8s.CustomImageID
-	jupyterhubImageID      gingk8s.CustomImageID
-	oauth2ProxyImageID     gingk8s.ThirdPartyImageID
+	gk8s                    gingk8s.Gingk8s
+	clusterID               gingk8s.ClusterID
+	mlflowOIDCProxyImageID  gingk8s.CustomImageID
+	jupyterhubImageID       gingk8s.CustomImageID
+	oauth2ProxyImageID      gingk8s.ThirdPartyImageID
+	kubectlImageID          gingk8s.ThirdPartyImageID
+	keycloakImageID         gingk8s.ThirdPartyImageID
+	redisImageID            gingk8s.ThirdPartyImageID
+	mlflowImageID           gingk8s.ThirdPartyImageID
+	kubeIngressProxyImageID gingk8s.ThirdPartyImageID
+	nginxImageID            gingk8s.ThirdPartyImageID
+	postgresImageIDs        gingk8s.ThirdPartyImageIDs
+	certManagerImageIDs     gingk8s.ThirdPartyImageIDs
+	minioImageIDs           gingk8s.ThirdPartyImageIDs
 )
 
 var _ = BeforeSuite(func(ctx context.Context) {
@@ -46,9 +55,37 @@ var _ = BeforeSuite(func(ctx context.Context) {
 
 	oauth2ProxyImageID = gk8s.ThirdPartyImage(&oauth2ProxyImage)
 
+	kubectlImageID = gk8s.ThirdPartyImage(kubectlImage)
+
+	keycloakImageID = gk8s.ThirdPartyImage(keycloakImage)
+
+	redisImageID = gk8s.ThirdPartyImage(redisImage)
+
+	mlflowImageID = gk8s.ThirdPartyImage(mlflowImage)
+
+	kubeIngressProxyImageID = gk8s.ThirdPartyImage(kubeIngressProxyImage)
+
+	nginxImageID = gk8s.ThirdPartyImage(nginxImage)
+
+	postgresImageIDs = gk8s.ThirdPartyImages(postgresImages...)
+
+	certManagerImageIDs = gk8s.ThirdPartyImages(certManagerImages...)
+
+	minioImageIDs = gk8s.ThirdPartyImages(minioImages...)
+
 	clusterID = gk8s.Cluster(&cluster,
-		mlflowOIDCProxyImageID, jupyterhubImageID,
-		oauth2ProxyImageID, // TODO: Add third party images for everything else
+		mlflowOIDCProxyImageID,
+		jupyterhubImageID,
+		oauth2ProxyImageID,
+		kubectlImageID,
+		keycloakImageID,
+		redisImageID,
+		mlflowImageID,
+		kubeIngressProxyImageID,
+		nginxImageID,
+		postgresImageIDs,
+		certManagerImageIDs,
+		minioImageIDs,
 	)
 
 	gk8s.Release(clusterID, &kubeIngressProxy) // , ingressNginxID)
@@ -123,6 +160,38 @@ spec:
   - '*.mlflow-oidc-proxy-it.cluster'
   - keycloak.default.svc.cluster.local
   - postgres-postgres.default.svc.cluster.local
+`,
+			`
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: robot-1
+spec:
+  commonName: 'robot-1'
+  secretName: robot-1
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
+`,
+			`
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: robot-2
+spec:
+  commonName: 'robot-2'
+  secretName: robot-2
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
 `,
 		},
 
@@ -425,6 +494,27 @@ spec:
 			"image.repository":              mlflowOIDCProxyImage.WithTag(""),
 			"image.tag":                     gingk8s.DefaultExtraCustomImageTags()[0],
 			// "image.tag":                     gingk8s.DefaultCustomImageTag,
+
+			"ingress.enabled":                  true,
+			"ingress.hostname":                 "mlflow-api.mlflow-oidc-proxy-it.cluster",
+			"ingress.tls.extraTLS[0].hosts[0]": "mlflow-api.mlflow-oidc-proxy-it.cluster",
+
+			"config.yaml.robots.robots[0].name":                        "robot-1",
+			"config.yaml.robots.robots[0].token.realm_access.roles[0]": "tenant-1",
+			"config.yaml.robots.robots[0].token.preferred_username":    "robot-1",
+			"config.yaml.robots.robots[0].secret.name":                 "robot-1",
+			"config.yaml.robots.robots[0].secret.key":                  "tls.crt",
+			"config.yaml.robots.robots[1].name":                        "robot-2",
+			"config.yaml.robots.robots[1].token.realm_access.roles[0]": "tenant-2",
+			"config.yaml.robots.robots[1].token.preferred_username":    "robot-2",
+			"config.yaml.robots.robots[1].secret.name":                 "robot-2",
+			"config.yaml.robots.robots[1].secret.key":                  "tls.crt",
+		},
+		SetString: gingk8s.StringObject{
+			"ingress.className": "nginx",
+			`ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-pass-certificate-to-upstream`: "true",
+			`ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-verify-client`:                "optional_no_ca",
+			`ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-secret`:                       `default/test-cert`,
 		},
 	}
 
@@ -501,6 +591,12 @@ spec:
 			"oauth2-proxy.configuration.content": "integration-test/cases/refresh_access/oauth2_proxy.cfg",
 			"mlflow-oidc-proxy.config.content":   "integration-test/cases/refresh_access/mlflow-oidc-proxy.cfg",
 		},
+		SetString: gingk8s.StringObject{
+			"mlflow-oidc-proxy.ingress.className": "nginx",
+			`mlflow-oidc-proxy.ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-pass-certificate-to-upstream`: "true",
+			`mlflow-oidc-proxy.ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-verify-client`:                "optional_no_ca",
+			`mlflow-oidc-proxy.ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-secret`:                       `default/mlflow-multitenant-ca`,
+		},
 		Set: gingk8s.Object{
 			"keycloak.ingress.enabled":              true,
 			"keycloak.ingress.ingressClassName":     "nginx",
@@ -533,6 +629,15 @@ spec:
 			"mlflow-oidc-proxy.image.repository": mlflowOIDCProxyImage.WithTag(""),
 			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultExtraCustomImageTags()[0],
 			//"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultCustomImageTag,
+			"mlflow-oidc-proxy.config.yaml.tls.terminated":                               true,
+			"mlflow-oidc-proxy.config.yaml.robots.robots[0].name":                        "robot-1",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[0].token.realm_access.roles[0]": "tenant-1",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[0].token.preferred_username":    "robot-1",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[1].name":                        "robot-2",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[1].token.realm_access.roles[0]": "tenant-2",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[1].token.preferred_username":    "robot-2",
+			"mlflow-oidc-proxy.ingress.enabled":                                          true,
+			"mlflow-oidc-proxy.ingress.hostname":                                         "mlflow-api.mlflow-oidc-proxy-it.cluster",
 
 			"keycloakJob.extraClients[0].id":          "jupyterhub",
 			"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
@@ -644,6 +749,26 @@ spec:
 			"hub.config.GenericOAuthenticator.token_url":     "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/token",
 			"hub.config.GenericOAuthenticator.authorize_url": "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/auth",
 		}),
+	}
+
+	kubectlImage          = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/kubectl:1.25.3"}
+	keycloakImage         = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/keycloak:21.0.2-debian-11-r0"}
+	redisImage            = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/redis:7.0.10-debian-11-r4"}
+	mlflowImage           = &gingk8s.ThirdPartyImage{Name: "docker.io/ubuntu/mlflow:2.1.1_1.0-22.04"}
+	kubeIngressProxyImage = &gingk8s.ThirdPartyImage{Name: "ghcr.io/meln5674/kube-ingress-proxy:v0.3.0-rc1"}
+	postgresImages        = []*gingk8s.ThirdPartyImage{
+		&gingk8s.ThirdPartyImage{Name: "ghcr.io/zalando/spilo-15:3.0-p1"},
+		&gingk8s.ThirdPartyImage{Name: "registry.opensource.zalan.do/acid/postgres-operator:v1.10.0"},
+	}
+	certManagerImages = []*gingk8s.ThirdPartyImage{
+		&gingk8s.ThirdPartyImage{Name: "quay.io/jetstack/cert-manager-cainjector:v1.11.1"},
+		&gingk8s.ThirdPartyImage{Name: "quay.io/jetstack/cert-manager-controller:v1.11.1"},
+		&gingk8s.ThirdPartyImage{Name: "quay.io/jetstack/cert-manager-webhook:v1.11.1"},
+	}
+	nginxImage  = &gingk8s.ThirdPartyImage{Name: "registry.k8s.io/ingress-nginx/controller:v1.7.0"}
+	minioImages = []*gingk8s.ThirdPartyImage{
+		&gingk8s.ThirdPartyImage{Name: "quay.io/minio/mc:RELEASE.2023-04-12T02-21-51Z"},
+		&gingk8s.ThirdPartyImage{Name: "quay.io/minio/minio:RELEASE.2023-04-13T03-08-07Z"},
 	}
 )
 

@@ -1,0 +1,10 @@
+config:
+  yaml:
+    robots:
+      robots:
+      - name: robot-1
+        token:
+          some: claim
+        secret:
+          name: foo
+          key: bar

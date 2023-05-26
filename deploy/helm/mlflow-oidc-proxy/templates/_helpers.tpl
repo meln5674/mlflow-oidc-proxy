@@ -61,10 +61,36 @@ Create the name of the service account to use
 {{- end }}
 {{- end }}
 
+{{- define "mlflow-oidc-proxy.secretName" -}}
+{{ .Values.credentials.existingSecret.name | default (include "mlflow-oidc-proxy.fullname" .) }}
+{{- end -}}
+
 {{- define "mlflow-oidc-proxy.configMapName" -}}
 {{ .Values.config.existingConfigMap.name | default (include "mlflow-oidc-proxy.fullname" .) }}
 {{- end -}}
 
-{{- define "mlflow-oidc-proxy.secretName" -}}
-{{ .Values.credentials.existingSecret.name | default (include "mlflow-oidc-proxy.fullname" .) }}
-{{- end -}}
+
+
+{{- define "mlflow-oidc-proxy.robots" -}}
+{{- $dot := . }}
+{{- $robotMap := dict }}
+{{- range $robot := .Values.config.yaml.robots.robots }}
+    {{- $certPath := $robot.certPath | default (printf "/var/run/secrets/robots/%s/tls.crt" $robot.name) }}
+    {{- $robotMap = set $robotMap $robot.name (set (deepCopy $robot) "certPath" $certPath) }}
+{{- end }}
+{{- if .Values.config.yaml.robots.robotsTemplate }}
+    {{- $robotsTplOutput := tpl .Values.config.yaml.robots.robotsTemplate $dot | fromYaml }}
+    {{- with $robotsTplOutput.Error }}
+        {{- fail . }}
+    {{- end }}
+    {{- $robotsTplOutput = $robotsTplOutput.robots }}
+    {{- range $robot := $robotsTplOutput }}
+        {{- $existingRobot := get $robotMap $robot.name | default dict }}
+        {{- $mergedRobot := mergeOverwrite $existingRobot $robot }}
+        {{- $certPath := $mergedRobot.certPath | default (printf "/var/run/secrets/robots/%s/tls.crt" $robot.name) }}
+        {{- $mergedRobot = set $mergedRobot "certPath" $certPath }}
+        {{- $robotMap = set $robotMap $mergedRobot.name $mergedRobot }}
+    {{- end }}
+{{- end }}
+{{- (dict "robots" (values $robotMap)) | toJson }}
+{{- end }}

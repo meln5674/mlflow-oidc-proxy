@@ -36,7 +36,7 @@ Forbidden: You are not part of this tenant
 	// DefaulTokenMode is the default value of the config oidc.tokenMode.
 	DefaultTokenMode = TokenModeRaw
 	// DefaultCerificate header is the default value of the config robots.certificateHeader
-	DefaultCertificateHeader = "ssl-client-cert"
+	DefaultCertificateHeader = "Ssl-Client-Cert"
 )
 
 var (

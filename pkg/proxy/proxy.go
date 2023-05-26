@@ -189,6 +189,9 @@ func NewProxy(config ProxyConfig, opts ProxyOptions) (*ProxyState, error) {
 	}
 	state.RobotsByCert = make(map[string]Robot, len(config.Robots.Robots))
 	for _, robot := range config.Robots.Robots {
+		if robot.Cert.Raw == "" {
+			return nil, fmt.Errorf("Robot %s is missing certPath", robot.Name)
+		}
 		derBase64 := base64.StdEncoding.EncodeToString(robot.Cert.Inner.Raw)
 		state.RobotsByCert[derBase64] = robot
 	}

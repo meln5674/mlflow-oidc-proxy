@@ -1,0 +1,14 @@
+config:
+  yaml:
+    mlflow:
+      tenants:
+      - id: tenant-1
+      - id: tenant-2
+      - id: tenant-3
+      - id: tenant-4
+      - id: tenant-5
+      - id: tenant-6
+      - id: tenant-7
+      - id: tenant-8
+      - id: tenant-9
+      - id: tenant-10

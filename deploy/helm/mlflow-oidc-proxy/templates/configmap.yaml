@@ -1,7 +1,13 @@
 {{- define "mlflow-oidc-proxy.configMapContents" -}}
 data:
   '{{ .Values.config.existingConfigMap.key }}': |-
-    {{- .Values.config.yaml | toYaml | nindent 4 }}
+    {{- $dot := . }}
+    {{- $output := include "mlflow-oidc-proxy.robots" . | fromJson }}
+    {{- $robots := ($output | fromJson).robots }}
+    {{ $output | toYaml | fail }}
+    {{- $config := deepCopy .Values.config.yaml }}
+    {{- $config = set $config "robots" (set $config.robots "robots" $robots) }}
+    {{- $config | toYaml | nindent 4 }}
 {{- end -}}
 
 {{- if not .Values.config.existingConfigMap.name }}

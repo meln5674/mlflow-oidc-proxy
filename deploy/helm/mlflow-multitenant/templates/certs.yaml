@@ -1,7 +1,8 @@
 {{- $dot := . }}
 
-
 {{- if .Values.certManagerCerts.enabled }}
+{{- $mlflowOIDCProxy := index .Values "mlflow-oidc-proxy" }}
+
 {{- if not .Values.certManagerCerts.existingIssuer.name }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
@@ -97,6 +98,35 @@ spec:
 ---
 {{- end }}
 
+{{- if $mlflowOIDCProxy.ingress.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" . }}-mlflow-oidc-proxy
+spec:
+  commonName: {{ $mlflowOIDCProxy.ingress.hostname }}
+  secretName: {{ $mlflowOIDCProxy.ingress.tls.secretName }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    {{- if not .Values.certManagerCerts.existingIssuer.name }}
+    name: {{ include "mlflow-multitenant.fullname" . }}-ca
+    kind: Issuer
+    {{- else }}
+    name: {{ .Values.certManagerCerts.existingIssuer.name }}
+    kind: {{ .Values.certManagerCerts.existingIssuer.kind }}
+    {{- end }}
+    group: cert-manager.io
+  dnsNames:
+  - {{ $mlflowOIDCProxy.ingress.hostname }}
+  {{- with $mlflowOIDCProxy.ingress.extraHosts }}
+  {{- . | toYaml | nindent 2 }}
+  {{- end }}
+---
+{{- end }}
+
+
 
 {{- if and .Values.postgres.enabled }}
 apiVersion: cert-manager.io/v1
@@ -121,6 +151,35 @@ spec:
 ---
 {{- end }}
 
-
+{{- if .Values.certManagerCerts.createRobotCerts }}
+{{- $config := deepCopy $mlflowOIDCProxy.config.yaml }}
+{{- $fromContents := fromYaml $mlflowOIDCProxy.config.contents }}
+{{- with $fromContents.Error }}
+{{- fail . }}
+{{- end }}
+{{- $config = mergeOverwrite $config $fromContents }}
+{{- range $robot := $config.robots.robots }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" $dot }}-robot-{{ $robot.name }}
+spec:
+  commonName: {{ include "mlflow-multitenant.fullname" $dot }}-robot-{{ $robot.name }}
+  secretName: {{ include "mlflow-multitenant.fullname" $dot }}-robot-{{ $robot.name }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    {{- if not $dot.Values.certManagerCerts.existingIssuer.name }}
+    name: {{ include "mlflow-multitenant.fullname" $dot }}-ca
+    kind: Issuer
+    {{- else }}
+    name: {{ $dot.Values.certManagerCerts.existingIssuer.name }}
+    kind: {{ $dot.Values.certManagerCerts.existingIssuer.kind }}
+    {{- end }}
+    group: cert-manager.io
+---
+{{- end }}
+{{- end }}
 
 {{- end }}

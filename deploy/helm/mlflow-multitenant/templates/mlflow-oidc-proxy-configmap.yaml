@@ -21,6 +21,14 @@ data:
   {{ $tenants = append $tenants (dict "id" $tenant.id "name" $tenant.name "upstream" $upstream) }}
   {{- end }}
   {{- $_ := set $config.mlflow "tenants" $tenants }}
+
+  {{- $robots := list }}
+  {{- range $robot := $config.robots.robots }}
+  {{- $certPath := printf "/var/run/secrets/robots/%s/tls.crt" $robot.name }}
+  {{- $configRobot := set (deepCopy $robot) "certPath" $certPath }}
+  {{- $robots = append $robots $configRobot }}
+  {{- end }}
+  {{- $config = set $config "robots" (set $config.robots "robots" $robots) }}
   {{- $externalURL :=  $config.http.externalURL | default (include "mlflow-multitenant.externalURL" .) }}
   {{- $_ = set $config.http "externalURL" $externalURL }}
   mlflow-oidc-proxy.cfg: |
