@@ -31,3 +31,6 @@ variables:
     values: ['mlflow-values']
     values-template: ['mlflow-values-template']
     values-and-template: ['mlflow-values-and-template']
+  robots:
+    off: []
+    on: ['robots']

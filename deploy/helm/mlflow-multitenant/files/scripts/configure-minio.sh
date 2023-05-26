@@ -1,8 +1,10 @@
 #!/bin/bash -xeu
 
+set -o pipefail
+
 function random-alphanumeric {
     len=$1
-    tr -dc A-Za-z0-9 </dev/urandom | head -c "${len}"
+    (tr -dc A-Za-z0-9 </dev/urandom || true) | head -c "${len}"
 }
 
 function ensure-random-alphanumeric {
@@ -45,7 +47,14 @@ EOF
 }
 
 ALIAS=minio
-mc alias set "${ALIAS}" "${MINIO_URL}" "${MINIO_USER}" "${MINIO_PASSWORD}"
+while ! ALIAS_SET_LOG=$(mc alias set "${ALIAS}" "${MINIO_URL}" "${MINIO_USER}" "${MINIO_PASSWORD}" 2>&1 | tee /dev/stderr) ; do
+    if grep -q 'Server not initialized, please try again.' <<< "${ALIAS_SET_LOG}" ; then
+        echo 'Minio is having a moment, please wait...'
+        sleep 15
+    else
+        exit 1
+    fi
+done
 
 while ! mc ping "${ALIAS}" --error-count 1 --count 1; do
     echo "Minio is still starting up, waiting..."
@@ -77,6 +86,17 @@ while read -r user access_key bucket ; do
         done
     fi
     if ! mc admin policy entities "${ALIAS}" --user "${access_key}" | grep -v 'User:' | grep "${policy}"; then 
-        mc admin policy attach "${ALIAS}" "${policy}" --user "${access_key}"
+        # Minio has a defect where policies are created, and possibly even show up as existing, but fail to attach.
+        # This seems to be exaserbated when the system is under heavy load, and is likely due to replication lag.
+        # This is a brute force workaround where we check if the error message contains the "does not exist" message,
+        # and try again after a few seconds, but fail as normal if that message is not present
+        while ! ATTACH_LOG=$(mc admin policy attach "${ALIAS}" "${policy}" --user "${access_key}" 2>&1 | tee /dev/stderr) ; do
+           if grep -q 'Specified canned policy does not exist' <<< "${ATTACH_LOG}" ; then
+               echo 'Minio is having a moment, please wait...'
+               sleep 15
+           else
+               exit 1
+           fi
+       done
     fi
 done <<< "${USER_BUCKETS}"

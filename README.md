@@ -138,6 +138,27 @@ robots:
       # ...
 ```
 
+#### Extra Template functions
+
+In addition to those provided by [sprig](https://masterminds.github.io/sprig/), the following additional functions are provided for use in policy templates:
+
+##### intersection list_of_lists
+
+Return the list of items which appear in every list in list_of_lists.
+
+Example: Find which of a set of roles a user has
+
+`{{ intersection (list (list "role-1" "role-2") .Token.roles) }}`
+
+##### has_intersection list_of_lists
+
+Return true if any item appears in all lists in list_of_lists. This is equivalent to `intersection list_of_lists | empty | not`, however, it short circuits, returning true as soon as the first matching item is found.
+
+Example: Check if a user has any of a set of roles
+
+`{{ has_intersection (list (list "role-1" "role-2") .Token.roles) }}`
+
+
 ### Environment Variables
 
 None currently.

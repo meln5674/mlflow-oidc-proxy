@@ -1,0 +1,11 @@
+config:
+  yaml:
+    robots:
+      robots:
+      - name: foo
+        certPath: bar
+        token:
+          baz: qux
+        secret:
+          name: foo
+          key: bar

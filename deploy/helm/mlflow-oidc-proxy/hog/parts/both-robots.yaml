@@ -1,0 +1,27 @@
+config:
+  yaml:
+    robots:
+      robots:
+      - name: robot-1
+        certPath: foo
+        secret:
+          name: foo
+      - name: robot-2
+        token:
+          some: other-claim
+        secret:
+          name: foo
+          key: bar
+      robotsTemplate: |
+        robots:
+        - name: robot-1
+          token:
+            some: claim
+          secret:
+            key: bar
+        - name: robot-3
+          token:
+            something: else
+          secret:
+            name: foo
+            key: bar

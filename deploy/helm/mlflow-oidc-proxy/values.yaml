@@ -51,6 +51,7 @@ ingress:
   tls:
     secretName: ''
   extraTLS: []
+  pathType: Prefix
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -132,6 +133,25 @@ config:
       # 
       # The default policy checks if a user has a Keycloak realm role matching the ID of the tenant
       # in question, and allows all requests if they do
-      # rbacPolicy: |-
+      # policy: |-
       # <template>
-       
+    robots:
+      # When serving over plaintext (e.g, when TLS is terminated by ingress), Check this header for the certificate. 
+      certificateHeader: Ssl-Client-Cert
+      # Robot users
+      robots: []
+      # - name: robot-name
+      #   secret:
+      #     name: my-secret
+      #     key: tls.crt
+      #   token:
+      #     claim: value
+      # If present, this template will be instantiated and merged to the contents of robots
+      # using the name key.
+      # This allows you to, for example, generate one robot per tenant using a for loop,
+      # or dynamically generate a list of robots from a superchart
+      # If using an existing configMap, secrets will still be mounted based on this template output,
+      # but it is the user's responsibility to ensure that the list of robots matches between this
+      # template and the configmap contents
+      # WARNING: Due to the way helm templating works, you MUST return the list using a map with a single key named "robots"
+      robotsTemplate: ''
