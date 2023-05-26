@@ -754,7 +754,7 @@ spec:
 	kubectlImage          = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/kubectl:1.25.3"}
 	keycloakImage         = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/keycloak:21.0.2-debian-11-r0"}
 	redisImage            = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/redis:7.0.10-debian-11-r4"}
-	mlflowImage           = &gingk8s.ThirdPartyImage{Name: "docker.io/ubuntu/mlflow:2.1.1_1.0-22.04"}
+	mlflowImage           = &gingk8s.ThirdPartyImage{Name: "ghcr.io/mlflow/mlflow:v2.3.2"}
 	kubeIngressProxyImage = &gingk8s.ThirdPartyImage{Name: "ghcr.io/meln5674/kube-ingress-proxy:v0.3.0-rc1"}
 	postgresImages        = []*gingk8s.ThirdPartyImage{
 		&gingk8s.ThirdPartyImage{Name: "ghcr.io/zalando/spilo-15:3.0-p1"},

@@ -46,7 +46,7 @@ mlflow:
     replicaCount: 2
 
     image:
-      repository: docker.io/ubuntu/mlflow
+      repository: ghcr.io/mlflow/mlflow
       pullPolicy: IfNotPresent
       # Overrides the image tag whose default is the chart appVersion.
       tag: ""
