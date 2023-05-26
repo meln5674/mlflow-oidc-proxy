@@ -12,6 +12,8 @@ This server proxies all of the tenant tracking servers, and applies a user-provi
 
 For using the tracking server web browser UI, OIDC is handled as normal. For API access, the user is responsible for configuring their SSO provider and authenticating proxy to provide token support. See [this fork](https://github.com/meln5674/oauth2-proxy) of OAuth2 Proxy for an example of doing this using OAuth2 offline access tokens.
 
+For automated access ("Non-Person Entities"), the server provides the ability to use "robot accounts". These work similarly to adding SSH public keys to a git repository, but instead work by associating a TLS certificate with a pre-made set of token claims. The private key can then be used with the MLFlow library, or with any HTTPS client library. These can be used to build models from whtin MLOps pipelines, or to retrieve a model from an automated model server.
+
 This server is 100% stateless, meaning multiple replicas can be deployed and load-balanced without additional configuration.
 
 
@@ -20,7 +22,8 @@ This server is 100% stateless, meaning multiple replicas can be deployed and loa
 Needed tools:
 
 * Go 1.19+
-* Docker (Or compatible OCI image builder tool) (if building docker image)
+* GNU Make
+* Docker (Or compatible OCI image builder tool) (if building docker image or running end-to-end tests)
 * Kubectl, Helm, Kind (If running end-to-end tests)
 
 ### Build Executable
@@ -196,6 +199,22 @@ You have three major options for deploying:
 2. Deploy the proxy using the [standalone helm chart](./deploy/helm/mlflow-oidc-proxy)
 3. Deploy an ["all-in-one" chart](./deploy/helm/mlflow-multitenant) that contains all components needed to go from zero to a secure, highly available, resilient, multitenant MLFlow deployment.
 
+### Helm Charts
+
+```bash
+# Add repository
+helm repo add https://meln5674.github.io/mlflow-oidc-proxy/
+
+# Choose one:
+
+# Standalone chart
+helm install mlflow-oidc-proxy/mlflow-oid-proxy
+
+# Omnibus chart
+helm install mlflow-oidc-proxy/mlflow-multitenant
+```
+
+
 
 ## Development
 
@@ -218,5 +237,6 @@ make coverprofile.out
 # picks the best one, and then performs a REST request against a temporary server using that
 # best model.
 # This takes a substantial amount of time (~20m)
+# If you want to watch the browser in action, export BILOBA_INTERACTIVE=true
 make e2e
 ```
