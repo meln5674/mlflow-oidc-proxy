@@ -3,10 +3,10 @@ name: mlflow-multitenant
 description: Multitenant MLFlow using oauth2-proxy, mlflow-oicd-proxy, the zalando postgres-operator, and minio
 type: application
 version: 0.1.0
-appVersion: "2.1.1_1.0-22.04"
+appVersion: "v2.3.2"
 dependencies:
 - name: mlflow-oidc-proxy
-  repository: file://../mlflow-oidc-proxy
+  repository: file://../mlflow-oidc-proxy # This is set to the actual chart repo in the github actions
   version: 0.1.0
 - name: keycloak
   repository: oci://registry-1.docker.io/bitnamicharts
