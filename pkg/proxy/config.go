@@ -47,13 +47,13 @@ var (
 
 func initDefaults() {
 	var err error
-	ParsedDefaultPolicy.Inner, err = template.New("oidc.policy [default]").Funcs(sprig.FuncMap()).Parse(DefaultPolicy)
+	ParsedDefaultPolicy.Inner, err = template.New("oidc.policy [default]").Funcs(sprig.FuncMap()).Funcs(FuncMap()).Parse(DefaultPolicy)
 	if err != nil {
 		panic(err)
 	}
 	ParsedDefaultPolicy.Raw = DefaultPolicy
 
-	ParsedDefaultGetSubject.Inner, err = template.New("oidc.getSubject [default]").Funcs(sprig.FuncMap()).Parse(DefaultGetSubject)
+	ParsedDefaultGetSubject.Inner, err = template.New("oidc.getSubject [default]").Funcs(sprig.FuncMap()).Funcs(FuncMap()).Parse(DefaultGetSubject)
 	if err != nil {
 		panic(err)
 	}
@@ -214,8 +214,8 @@ type ProxyConfig struct {
 }
 
 func (p *ProxyConfig) Init() *ProxyConfig {
-	p.OIDC.GetSubject.Inner = template.New("oidc.getSubject").Funcs(sprig.FuncMap())
-	p.OIDC.Policy.Inner = template.New("oidc.policy").Funcs(sprig.FuncMap())
+	p.OIDC.GetSubject.Inner = template.New("oidc.getSubject").Funcs(sprig.FuncMap()).Funcs(FuncMap())
+	p.OIDC.Policy.Inner = template.New("oidc.policy").Funcs(sprig.FuncMap()).Funcs(FuncMap())
 	return p
 }
 

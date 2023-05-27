@@ -193,4 +193,36 @@ var _ = Describe("Config", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(sub).To(Equal("baz"))
 	})
+
+	It("should provide intersection function", func() {
+		config = new(proxy.ProxyConfig).Init()
+		Expect(json.Unmarshal([]byte(`{
+			"oidc": {
+				"getSubject": "{{ intersection (list 1 2 3) (list 2 3 4) | toJson }}"
+			}
+		}`), &config)).To(Succeed())
+
+		Expect(config.ApplyDefaults()).To(Succeed())
+		p, err := proxy.NewProxy(*config, proxy.ProxyOptions{})
+		Expect(err).ToNot(HaveOccurred())
+		sub, err := p.GetSubject(&jwt.Token{Claims: jwt.MapClaims{}})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(sub).To(Equal(`[2,3]`))
+	})
+
+	It("should provide hasIntersection function", func() {
+		config = new(proxy.ProxyConfig).Init()
+		Expect(json.Unmarshal([]byte(`{
+			"oidc": {
+				"getSubject": "{{ hasIntersection (list 1 2 3) (list 2 3 4) | toJson }}"
+			}
+		}`), &config)).To(Succeed())
+
+		Expect(config.ApplyDefaults()).To(Succeed())
+		p, err := proxy.NewProxy(*config, proxy.ProxyOptions{})
+		Expect(err).ToNot(HaveOccurred())
+		sub, err := p.GetSubject(&jwt.Token{Claims: jwt.MapClaims{}})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(sub).To(Equal(`true`))
+	})
 })
