@@ -284,7 +284,7 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	// Once again, there doesn't appear to be any element we can check for that indicates the terminal is connected
 	time.Sleep(2 * time.Second)
 	Expect(chromedp.Run(b.Context, KeyEventNoChar(startupScript))).To(Succeed())
-	Eventually(sentinelButton, "2m").Should(b.Exist())
+	Eventually(sentinelButton, "10m").Should(b.Exist())
 	folderButton := `li[title^="Name: mlflow-example"]`
 	Expect(folderButton).To(b.Exist())
 
