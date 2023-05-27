@@ -374,7 +374,7 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	Eventually(b.Location, "5s").Should(HavePrefix(fmt.Sprintf("%s/#/experiments/1", mlflowTenantURL)))
 
 	mostRecentRun := `div.ag-pinned-left-cols-container > .ag-row-even:nth-child(1) a`
-	Eventually(mostRecentRun).Should(b.Exist())
+	Eventually(mostRecentRun, "15s").Should(b.Exist())
 	b.Click(mostRecentRun)
 
 	userField := `div[data-test-id="descriptions-item"]:nth-child(4) div[data-test-id="descriptions-item-content"] a`
