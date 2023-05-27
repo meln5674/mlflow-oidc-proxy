@@ -26,6 +26,7 @@ deps:
 	mkdir -p bin
 	go mod download
 	grep ginkgo go.mod | awk '{ print $$1 "/ginkgo@" $$2 }' | GOBIN=$$PWD/bin xargs go install
+	go install github.com/meln5674/helm-hog@e1150264ec7048f21e4fccf0a9cddd0a7afce0e1
 
 bin/mlflow-oidc-proxy:
 	go build -o bin/mlflow-oidc-proxy main.go
