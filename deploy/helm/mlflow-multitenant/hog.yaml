@@ -24,8 +24,6 @@ variables:
     zero: []
     one: ['single-tenant']
     two: ['two-tenants']
-    three: ['three-tenants']
-    ten: ['ten-tenants']
   mlflow-values:
     none: []
     values: ['mlflow-values']

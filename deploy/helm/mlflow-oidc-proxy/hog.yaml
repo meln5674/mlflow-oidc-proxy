@@ -16,3 +16,6 @@ variables:
     static: ['static-robots']
     dynamic: ['dynamic-robots']
     both: ['both-robots']
+  config:
+    yaml: []
+    configmap: ['existing-configmap']
