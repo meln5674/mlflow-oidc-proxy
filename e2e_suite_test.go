@@ -659,7 +659,7 @@ spec:
 			"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
 			"keycloakJob.extraClients[0].callbackURL": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
 
-			"postgres.extraUsers.jupyterhub":     "null",
+			"postgres.extraUsers.jupyterhub[0]":  "login",
 			"postgres.extraDatabases.jupyterhub": "jupyterhub",
 
 			"mlflow.tenants[0].id":   "tenant-1",
