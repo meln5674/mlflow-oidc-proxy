@@ -587,7 +587,8 @@ spec:
 		Name: "mlflow-multitenant-deps",
 		Chart: &gingk8s.HelmChart{
 			LocalChartInfo: gingk8s.LocalChartInfo{
-				Path: "deploy/helm/mlflow-multitenant-deps",
+				Path:             "deploy/helm/mlflow-multitenant-deps",
+				DependencyUpdate: true,
 			},
 		},
 	}
@@ -596,7 +597,8 @@ spec:
 		Name: "mlflow-multitenant",
 		Chart: &gingk8s.HelmChart{
 			LocalChartInfo: gingk8s.LocalChartInfo{
-				Path: "deploy/helm/mlflow-multitenant",
+				Path:             "deploy/helm/mlflow-multitenant",
+				DependencyUpdate: true,
 			},
 		},
 		ValuesFiles:  []string{"deploy/helm/mlflow-multitenant/values.yaml"},
@@ -634,7 +636,7 @@ spec:
 			"oauth2-proxy.configuration.sessionStoreType": "redis",
 			"oauth2-proxy.image.registry":                 "local.host",
 			"oauth2-proxy.image.repository":               "mlflow-oidc-proxy/oauth2-proxy",
-			"oauth2-proxy.image.tag":                      "latest",
+			"oauth2-proxy.image.tag":                      gingk8s.DefaultExtraCustomImageTags()[0],
 			"oauth2-proxy.image.pullPolicy":               "Never",
 			"oauth2-proxy.hostAliases[0].ip":              getIngressControllerIP,
 			"oauth2-proxy.hostAliases[0].hostnames[0]":    "keycloak.mlflow-oidc-proxy-it.cluster",

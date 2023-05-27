@@ -137,16 +137,18 @@ jobs:
 
       - name: Set Chart Version And Deps
         run: |
-          for chart in mllfow-oidc-proxy mlflow-multitenant mlflow-multitenant-deps; do
+          for chart in mlflow-oidc-proxy mlflow-multitenant mlflow-multitenant-deps; do
             if [ -n "${{ steps.tagName.outputs.tag }}" ]; then
               yq -i '.version = "${{ steps.tagName.outputs.tag }}"' "deploy/helm/${chart}/Chart.yaml"
-              yq -i '.appVersion = "${{ steps.tagName.outputs.tag }}"' "deploy/helm/${chart}/Chart.yaml"
             else
               yq -i '.version = .version + "-'"${GITHUB_SHA}"'"' "deploy/helm/${chart}/Chart.yaml"
-              yq -i '.appVersion = "'"${GITHUB_SHA}"'"' "deploy/helm/${chart}/Chart.yaml"
             fi
           done
+          yq -i '.appVersion = "${{ steps.tagName.outputs.tag }}"' "deploy/helm/mlflow-oidc-proxy/Chart.yaml"
+          yq -i '.appVersion = "'"${GITHUB_SHA}"'"' "deploy/helm/mlflow-oidc-proxy/Chart.yaml"
           yq -i '(.dependencies[] | select(.name == "mlflow-oidc-proxy")).repository |= "https://meln5674.github.io/k8s-git-server/"'
+          helm dependency build deploy/helm/mlflow-multitenant-deps
+          helm dependency build deploy/helm/mlflow-multitenant
 
 
       - name: Lint
