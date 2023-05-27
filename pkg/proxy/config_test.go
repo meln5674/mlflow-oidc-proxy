@@ -3,6 +3,7 @@ package proxy_test
 import (
 	"encoding/json"
 
+	"github.com/golang-jwt/jwt/v4"
 	proxy "github.com/meln5674/mlflow-oidc-proxy/pkg/proxy"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,6 +26,7 @@ var _ = Describe("Config", func() {
 			Expect(config.TLS.Enabled).To(BeFalse())
 			Expect(config.OIDC.TokenHeader).To(Equal(proxy.DefaultTokenHeader))
 			Expect(config.OIDC.TokenMode).To(Equal(proxy.DefaultTokenMode))
+			Expect(config.OIDC.ExtraVariables).To(BeNil())
 			Expect(config.Robots.CertificateHeader).To(Equal(proxy.DefaultCertificateHeader))
 		})
 	})
@@ -63,7 +65,8 @@ var _ = Describe("Config", func() {
 					"oidc": {
 						"policy": "{{ eq 1 2 }}",
 						"tokenHeader": "X-My-Custom-Header",
-						"tokenMode": "bearer"
+						"tokenMode": "bearer",
+						"extraVariables": { "foo": ["bar"], "baz": 1, "qux": 3.5 }
 					},
 					"robots": {
 						"certificateHeader": "X-Another-Custom-Header",
@@ -102,6 +105,9 @@ var _ = Describe("Config", func() {
 			Expect(config.OIDC.TokenHeader).To(Equal("X-My-Custom-Header"))
 			Expect(config.OIDC.TokenMode).To(Equal(proxy.TokenModeBearer))
 			Expect(config.OIDC.Policy.Raw).To(Equal("{{ eq 1 2 }}"))
+			Expect(config.OIDC.ExtraVariables).To(HaveKeyWithValue("foo", HaveExactElements("bar")))
+			Expect(config.OIDC.ExtraVariables).To(HaveKeyWithValue("baz", BeNumerically("==", 1)))
+			Expect(config.OIDC.ExtraVariables).To(HaveKeyWithValue("qux", BeNumerically("==", 3.5)))
 			Expect(config.Robots.CertificateHeader).To(Equal("X-Another-Custom-Header"))
 			Expect(config.Robots.Robots).To(HaveLen(2))
 			Expect(config.Robots.Robots[0].Name).To(Equal("robot-1"))
@@ -169,5 +175,22 @@ var _ = Describe("Config", func() {
 				"policy": []
 			}
 		}`), &config)).ToNot(Succeed())
+	})
+
+	It("should correctly provide extra variables", func() {
+		config = new(proxy.ProxyConfig).Init()
+		Expect(json.Unmarshal([]byte(`{
+			"oidc": {
+				"getSubject": "{{ index .ExtraVariables.foo.Bar 2 }}",
+				"extraVariables": { "foo": { "Bar": [ 0, 1, "baz" ] } }
+			}
+		}`), &config)).To(Succeed())
+
+		Expect(config.ApplyDefaults()).To(Succeed())
+		p, err := proxy.NewProxy(*config, proxy.ProxyOptions{})
+		Expect(err).ToNot(HaveOccurred())
+		sub, err := p.GetSubject(&jwt.Token{Claims: jwt.MapClaims{}})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(sub).To(Equal("baz"))
 	})
 })

@@ -170,11 +170,12 @@ func (c *CertificateFromPath) UnmarshalJSON(bytes []byte) error {
 }
 
 type ProxyOIDCConfig struct {
-	TokenHeader  string    `json:"tokenHeader"`
-	TokenMode    TokenMode `json:"tokenMode"`
-	WellKnownURL URL       `json:"wellKnownURL"`
-	Policy       Template  `json:"policy"`
-	GetSubject   Template  `json:"getSubject"`
+	TokenHeader    string      `json:"tokenHeader"`
+	TokenMode      TokenMode   `json:"tokenMode"`
+	WellKnownURL   URL         `json:"wellKnownURL"`
+	Policy         Template    `json:"policy"`
+	GetSubject     Template    `json:"getSubject"`
+	ExtraVariables interface{} `json:"extraVariables"`
 }
 
 type ProxyMLFlowTenant struct {

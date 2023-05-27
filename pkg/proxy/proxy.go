@@ -200,9 +200,10 @@ func NewProxy(config ProxyConfig, opts ProxyOptions) (*ProxyState, error) {
 }
 
 type PolicyContext struct {
-	Tenant  *ProxyMLFlowTenant
-	Token   *jwt.Token
-	Request *http.Request
+	Tenant         *ProxyMLFlowTenant
+	Token          *jwt.Token
+	Request        *http.Request
+	ExtraVariables interface{}
 }
 
 func (p *ProxyState) InternalError(w http.ResponseWriter, req *http.Request, requestID string, msg string, err error) {
@@ -398,7 +399,8 @@ func peekKey(keyChan chan string) func(map[string]interface{}) error {
 func (p *ProxyState) GetSubject(token *jwt.Token) (string, error) {
 	s := strings.Builder{}
 	err := p.Config.OIDC.GetSubject.Inner.Execute(&s, PolicyContext{
-		Token: token,
+		Token:          token,
+		ExtraVariables: p.Config.OIDC.ExtraVariables,
 	})
 	if err != nil {
 		return "", err
@@ -524,9 +526,10 @@ func (p *ProxyState) Authorize(req *http.Request, tenant *ProxyMLFlowTenant, tok
 	err := p.Config.OIDC.Policy.Inner.Execute(
 		&errBuilder,
 		PolicyContext{
-			Token:   token,
-			Request: req,
-			Tenant:  tenant,
+			Token:          token,
+			Request:        req,
+			Tenant:         tenant,
+			ExtraVariables: p.Config.OIDC.ExtraVariables,
 		},
 	)
 
