@@ -136,6 +136,20 @@ var (
 			"installCRDs":        true,
 			"prometheus.enabled": false,
 		},
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/cert-manager",
+				For:      map[string]string{"condition": "Available"},
+			},
+			{
+				Resource: "deploy/cert-manager-webhook",
+				For:      map[string]string{"condition": "Available"},
+			},
+			{
+				Resource: "deploy/cert-manager-cainjector",
+				For:      map[string]string{"condition": "Available"},
+			},
+		},
 	}
 
 	certs = gingk8s.KubernetesManifests{
@@ -334,6 +348,12 @@ spec:
 				Version: "1.10.0",
 			},
 		},
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/postgres-operator",
+				For:      map[string]string{"condition": "Available"},
+			},
+		},
 	}
 
 	postgres = gingk8s.KubernetesManifests{
@@ -388,6 +408,12 @@ spec:
 			},
 		},
 		Set: minioSet(),
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/minio",
+				For:      map[string]string{"condition": "Available"},
+			},
+		},
 	}
 
 	postgresSecretsReady = gk8s.WaitForResourceExists(30*time.Second,
@@ -421,6 +447,12 @@ spec:
 				},
 			},
 			Set: mlflowSet(1),
+			Wait: []gingk8s.WaitFor{
+				{
+					Resource: "deploy/mlflow-tenant-1",
+					For:      map[string]string{"condition": "Available"},
+				},
+			},
 		},
 
 		gingk8s.HelmRelease{
@@ -431,6 +463,12 @@ spec:
 				},
 			},
 			Set: mlflowSet(2),
+			Wait: []gingk8s.WaitFor{
+				{
+					Resource: "deploy/mlflow-tenant-2",
+					For:      map[string]string{"condition": "Available"},
+				},
+			},
 		},
 	}
 
@@ -524,6 +562,12 @@ spec:
 			`ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-verify-client`:                "optional_no_ca",
 			`ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-secret`:                       `default/test-cert`,
 		},
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/mlflow-oidc-proxy",
+				For:      map[string]string{"condition": "Available"},
+			},
+		},
 	}
 
 	oauth2ProxyConfigMapPath = "integration-test/oauth2-proxy-cfg-configmap.yaml"
@@ -575,6 +619,12 @@ spec:
 			"image.tag":                         gingk8s.DefaultExtraCustomImageTags()[0],
 			"image.pullPolicy":                  "Never",
 		},
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/oauth2-proxy",
+				For:      map[string]string{"condition": "Available"},
+			},
+		},
 	}
 
 	jupyterhubImage = gingk8s.CustomImage{
@@ -589,6 +639,24 @@ spec:
 			LocalChartInfo: gingk8s.LocalChartInfo{
 				Path:             "deploy/helm/mlflow-multitenant-deps",
 				DependencyUpdate: true,
+			},
+		},
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/mlflow-multitenant-deps-cert-manager",
+				For:      map[string]string{"condition": "Available"},
+			},
+			{
+				Resource: "deploy/mlflow-multitenant-deps-cert-manager-webhook",
+				For:      map[string]string{"condition": "Available"},
+			},
+			{
+				Resource: "deploy/mlflow-multitenant-deps-cert-manager-cainjector",
+				For:      map[string]string{"condition": "Available"},
+			},
+			{
+				Resource: "deploy/mlflow-multitenant-deps-postgres-operator",
+				For:      map[string]string{"condition": "Available"},
 			},
 		},
 	}
@@ -734,6 +802,16 @@ spec:
 			"hub.config.GenericOAuthenticator.token_url":     "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/token",
 			"hub.config.GenericOAuthenticator.authorize_url": "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/auth",
 		}),
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/hub",
+				For:      map[string]string{"condition": "Available"},
+			},
+			{
+				Resource: "deploy/proxy",
+				For:      map[string]string{"condition": "Available"},
+			},
+		},
 	}
 
 	jupyterhub2 = gingk8s.HelmRelease{
@@ -765,6 +843,16 @@ spec:
 			"hub.config.GenericOAuthenticator.token_url":     "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/token",
 			"hub.config.GenericOAuthenticator.authorize_url": "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/auth",
 		}),
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/hub",
+				For:      map[string]string{"condition": "Available"},
+			},
+			{
+				Resource: "deploy/proxy",
+				For:      map[string]string{"condition": "Available"},
+			},
+		},
 	}
 
 	kubectlImage          = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/kubectl:1.25.3"}

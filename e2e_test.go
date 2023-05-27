@@ -444,6 +444,9 @@ var _ = Describe("Standalone setup", Ordered, func() {
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
 		gk8s := gspec
+
+		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
+
 		certManagerID := gk8s.Release(clusterID, &certManager, certManagerImageIDs)
 
 		certsID := gk8s.Manifests(clusterID, &certs, certManagerID)
@@ -468,7 +471,7 @@ var _ = Describe("Standalone setup", Ordered, func() {
 
 		postgresID := gk8s.Manifests(clusterID, &postgres, postgresOperatorID)
 
-		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", postgresSecretsReady)
+		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", postgresSecretsReady, postgresID)
 
 		minioID := gk8s.Release(clusterID, &minio, minioImageIDs)
 
@@ -555,6 +558,9 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
 		gk8s := gspec
+
+		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
+
 		mlflowDepsID := gk8s.Release(clusterID, &mlflowMultitenantDeps, postgresImageIDs, certManagerImageIDs)
 
 		ingressNginxID := gk8s.Release(clusterID, &ingressNginx2, nginxImageID) //	certsID,
