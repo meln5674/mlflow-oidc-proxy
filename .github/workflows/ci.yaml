@@ -16,9 +16,7 @@ env:
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
 
-  HELM_REPO_NAME: ${{ github.event.repository.name }}
-
-  HELM_REPO: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+  HELM_REPO: "oci://ghcr.io/${{ github.repository }}/charts"
 
   GO_VERSION: 1.20.4
 
@@ -215,11 +213,8 @@ jobs:
     # needs: [lint, test]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
-      # This is used to complete the identity challenge
-      # with sigstore/fulcio when running outside of PRs.
-      id-token: write
 
     steps:
       # Checkout
@@ -253,9 +248,14 @@ jobs:
 
 
       # Release charts
-      - name: Set Chart Version And Deps
+      - name: Push Charts
+        env:
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         run: |
           set -x
+
+          helm registry login "${REGISTRY}" -u "${GITHUB_ACTOR}" -p "${GITHUB_TOKEN}"
+
           GIT_TAG="${{ steps.tagName.outputs.tag }}"
           CHART_APPVERSION="${GIT_TAG:-${GITHUB_SHA}}"
           if [ -n "${GIT_TAG}" ]; then
@@ -263,40 +263,24 @@ jobs:
           else
             NEW_VERSION_EXPR='.version + "-'"${GITHUB_SHA}"'"'
           fi
-          mkdir -p deploy/helm-release/round-{1,2}
-          cp -r deploy/helm/{mlflow-oidc-proxy,mlflow-multitenant-deps} deploy/helm-release/round-1/
-          cp -r deploy/helm/mlflow-multitenant deploy/helm-release/round-2/
-          for chart in round-1/mlflow-oidc-proxy round-1/mlflow-multitenant-deps round-2/mlflow-multitenant; do
-              yq -i '.version = '"${NEW_VERSION_EXPR}"'' "deploy/helm-release/${chart}/Chart.yaml"
+          mkdir -p deploy/helm
+          for chart in mlflow-oidc-proxy mlflow-multitenant-deps mlflow-multitenant; do
+              yq -i '.version = '"${NEW_VERSION_EXPR}"'' "deploy/helm/${chart}/Chart.yaml"
           done
-          yq -i '.appVersion = "'"${CHART_APPVERSION}"'"' "deploy/helm-release/round-1/mlflow-oidc-proxy/Chart.yaml"
-          STANDALONE_CHART_VERSION="$(yq '.version' 'deploy/helm-release/round-1/mlflow-oidc-proxy/Chart.yaml')"
-          yq -i '(.dependencies[] | select(.name == "mlflow-oidc-proxy")).version |= "'"${STANDALONE_CHART_VERSION}"'"' 'deploy/helm-release/round-2/mlflow-multitenant/Chart.yaml'
-          yq -i '(.dependencies[] | select(.name == "mlflow-oidc-proxy")).repository |= "'"${HELM_REPO}"'"' 'deploy/helm-release/round-2/mlflow-multitenant/Chart.yaml'
+          yq -i '.appVersion = "'"${CHART_APPVERSION}"'"' "deploy/helm/mlflow-oidc-proxy/Chart.yaml"
+          STANDALONE_CHART_VERSION="$(yq '.version' 'deploy/helm/mlflow-oidc-proxy/Chart.yaml')"
+          yq -i '(.dependencies[] | select(.name == "mlflow-oidc-proxy")).version |= "'"${STANDALONE_CHART_VERSION}"'"' 'deploy/helm/mlflow-multitenant/Chart.yaml'
+          yq -i '(.dependencies[] | select(.name == "mlflow-oidc-proxy")).repository |= "'"${HELM_REPO}"'"' 'deploy/helm/mlflow-multitenant/Chart.yaml'
           helm repo add jetstack https://charts.jetstack.io
           helm repo add zalando https://opensource.zalando.com/postgres-operator/charts/postgres-operator
-          git add deploy/helm-release
-          git commit -m "Dummy commit to please chart-releaser"
-          helm dependency build deploy/helm-release/round-1/mlflow-multitenant-deps
+          helm dependency build deploy/helm/mlflow-multitenant-deps
+          helm package deploy/helm/mlflow-oidc-proxy/ --destination bin
+          helm package deploy/helm/mlflow-multitenant-deps/ --destination bin
+          helm push bin/mlflow-oidc-proxy-*.tgz "${HELM_REPO}"
+          helm push bin/mlflow-multitenant-deps-*.tgz "${HELM_REPO}"
+          rm -rf bin/*.tgz # The wildcard below matches the deps chart, this is a hack-y workaround
+          helm dependency build deploy/helm/mlflow-multitenant
+          helm package deploy/helm/mlflow-multitenant/ --destination bin
+          helm push bin/mlflow-multitenant-*.tgz "${HELM_REPO}"
 
 
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.5.0
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-        with:
-          charts_dir: deploy/helm-release/round-1/
-
-
-      - name: Set Chart Version And Deps (round 2)
-        run: |
-          set -x
-          helm repo add "${HELM_REPO_NAME}" "${HELM_REPO}"
-          helm dependency build deploy/helm-release/round-2/mlflow-multitenant
-
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.4.0
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-        with:
-          charts_dir: deploy/helm-release/round-2/

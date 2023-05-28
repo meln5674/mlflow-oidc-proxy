@@ -7,3 +7,4 @@ integration-test/groups
 integration-test/images
 integration-test/kubeconfig
 coverprofile.out
+bin
