@@ -28,23 +28,22 @@ You have three major options for deploying:
 
 ### Helm Charts
 
-```bash
-# Add repository
-helm repo add https://meln5674.github.io/mlflow-oidc-proxy/
+See [here](https://github.com/meln5674?tab=packages&repo_name=mlflow-oidc-proxy) for a list of current and valid versions
 
+See the `values.yaml` [files for the charts](./deploy/helm) for documentation on the available options.
+
+```bash
 # Choose one:
 
 # Standalone chart
-helm install mlflow-oidc-proxy/mlflow-oid-proxy
+helm install oci://ghcr.io/meln5674/mlflow-oidc-proxy/charts/mlflow-oidc-proxy --version ${version}
 
 # Omnibus chart
 # This first chart installs the operators that the second chart assumes are installed.
 # It is optional if you already have compatible versions installed.
-helm install mlflow-oidc-proxy/mlflow-multitenant-deps
-helm install mlflow-oidc-proxy/mlflow-multitenant
+helm install oci://ghcr.io/meln5674/mlflow-oidc-proxy/charts/mlflow-multitenant-deps --version ${version}
+helm install oci://ghcr.io/meln5674/mlflow-oidc-proxy/charts/mlflow-multitenant --version ${version}
 ```
-
-See the `values.yaml` [files for the charts](./deploy/helm) for documentation on the available options.
 
 ### MLFlow Setup
 
