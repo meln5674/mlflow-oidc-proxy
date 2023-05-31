@@ -238,7 +238,8 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	// There doesn't seem to be any obvious element whose existence indicates the browser is actually finished loading
 	time.Sleep(15 * time.Second)
 	rootFolderButton := ".jp-BreadCrumbs-home"
-	Eventually(rootFolderButton, "5s").Should(b.Exist())
+	// This has a very long timeout because on github actions, the server pod takes a long time to provision
+	Eventually(rootFolderButton, "5m").Should(b.Exist())
 	// When running headless, for whatever reason,
 	// the button doesn't immediately generate a layout, which causes the scrollIntoView to fail
 	time.Sleep(15 * time.Second)
