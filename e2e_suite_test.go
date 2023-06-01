@@ -702,6 +702,7 @@ spec:
 			"keycloak.extraVolumes[0].emptyDir.medium": "Memory",
 			"keycloak.extraVolumeMounts[0].name":       "home",
 			"keycloak.extraVolumeMounts[0].mountPath":  "/home/keycloak",
+			"keycloak.replicaCount":                    1,
 
 			"oauth2-proxy.ingress.enabled":                true,
 			"oauth2-proxy.ingress.ingressClassName":       "nginx",
@@ -714,6 +715,7 @@ spec:
 			"oauth2-proxy.image.pullPolicy":               "Never",
 			"oauth2-proxy.hostAliases[0].ip":              getIngressControllerIP,
 			"oauth2-proxy.hostAliases[0].hostnames[0]":    "keycloak.mlflow-oidc-proxy-it.cluster",
+			"oauth2-proxy.replicaCount":                   1,
 
 			"mlflow-oidc-proxy.image.pullPolicy": "Never",
 			"mlflow-oidc-proxy.image.repository": mlflowOIDCProxyImage.WithTag(""),
@@ -728,20 +730,25 @@ spec:
 			"mlflow-oidc-proxy.config.yaml.robots.robots[1].token.preferred_username":    "robot-2",
 			"mlflow-oidc-proxy.ingress.enabled":                                          true,
 			"mlflow-oidc-proxy.ingress.hostname":                                         "mlflow-api.mlflow-oidc-proxy-it.cluster",
+			"mlflow-oidc-proxy.replicaCount":                                             1,
 
 			"keycloakJob.extraClients[0].id":          "jupyterhub",
 			"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
 			"keycloakJob.extraClients[0].callbackURL": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
 
-			"postgres.extraUsers.jupyterhub[0]":  "login",
-			"postgres.extraDatabases.jupyterhub": "jupyterhub",
+			"postgres.extraUsers.jupyterhub[0]":    "login",
+			"postgres.extraDatabases.jupyterhub":   "jupyterhub",
+			"postgres.extraSpec.numberOfInstances": 1,
 
-			"mlflow.tenants[0].id":   "tenant-1",
-			"mlflow.tenants[0].name": "Tenant 1",
-			"mlflow.tenants[1].id":   "tenant-2",
-			"mlflow.tenants[1].name": "Tenant 2",
+			"mlflow.tenants[0].id":       "tenant-1",
+			"mlflow.tenants[0].name":     "Tenant 1",
+			"mlflow.tenants[1].id":       "tenant-2",
+			"mlflow.tenants[1].name":     "Tenant 2",
+			"mlflow.values.replicaCount": 1,
 
 			"minio.resources.requests.memory": "250Mi",
+			"minio.replicas":                  1,
+			"minio.mode":                      "standalone",
 		},
 	}
 

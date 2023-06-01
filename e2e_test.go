@@ -447,6 +447,7 @@ var _ = Describe("Standalone setup", Ordered, func() {
 		gk8s := gspec
 
 		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
+		gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
 
 		certManagerID := gk8s.Release(clusterID, &certManager, certManagerImageIDs)
 
@@ -561,6 +562,7 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 		gk8s := gspec
 
 		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
+		gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
 
 		mlflowDepsID := gk8s.Release(clusterID, &mlflowMultitenantDeps, postgresImageIDs, certManagerImageIDs)
 
