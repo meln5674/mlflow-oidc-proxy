@@ -672,8 +672,8 @@ spec:
 		ValuesFiles:  []string{"deploy/helm/mlflow-multitenant/values.yaml"},
 		UpgradeFlags: []string{"--wait-for-jobs", "--timeout=30m"},
 		SetFile: gingk8s.StringObject{
-			"oauth2-proxy.configuration.content": "integration-test/cases/refresh_access/oauth2_proxy.cfg",
-			"mlflow-oidc-proxy.config.content":   "integration-test/cases/refresh_access/mlflow-oidc-proxy.cfg",
+			"oauth2-proxy.configuration.extraContent": "integration-test/cases/refresh_access/oauth2_proxy.cfg",
+			"mlflow-oidc-proxy.config.content":        "integration-test/cases/refresh_access/mlflow-oidc-proxy.cfg",
 		},
 		SetString: gingk8s.StringObject{
 			"mlflow-oidc-proxy.ingress.className": "nginx",
