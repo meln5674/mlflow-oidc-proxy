@@ -16,6 +16,8 @@ function get-secret {
     fi
 }
 
-while read -r user secret_name ; do
-    get-secret "${secret_name}" "/tmp/${user}" AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-done <<< "${USER_SECRETS:-}"
+if [ -n "${USER_SECRETS:-}" ]; then
+    while read -r user secret_name ; do
+        get-secret "${secret_name}" "/tmp/${user}" AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+    done <<< "${USER_SECRETS:-}"
+fi

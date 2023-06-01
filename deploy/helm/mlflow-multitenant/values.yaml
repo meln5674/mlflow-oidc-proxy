@@ -249,6 +249,10 @@ oauth2-proxy:
     # This is the name of a configmap to generate in this chart
     # This is required in order to use the full chart's values in the content template
     existingConfigmap: mlflow-multitenant-oauth2-proxy
+
+    # This will be templated and included in the above configmap.
+    # These fields are inherent to how the chart is deployed, you probably
+    #   shouldn't change them unless you really know what you're doing
     content: |
       {{- $oauth2Proxy := index .Values "oauth2-proxy" }}
       {{- $mlflowOIDCProxy := index .Values "mlflow-oidc-proxy" }}
@@ -259,19 +263,25 @@ oauth2-proxy:
       {{- $upstreamTLS := not (empty $mlflowOIDCProxy.config.yaml.tls.enabled) }}
       {{- $upstreamProto := ternary "https" "http" $upstreamTLS }}
       upstreams=[ "{{ $upstreamProto }}://{{ $upstreamHost }}:{{ $upstreamPort }}" ]
-      redirect_url="{{ include "mlflow-multitenant.externalURL" . }}/oauth2/callback"
-      provider="oidc"
-      provider_display_name="Keycloak"
-      oidc_issuer_url="https://{{ .Values.keycloak.ingress.hostname }}/realms/{{ .Values.keycloakJob.realm }}"
-      scope="profile roles profile email openid"
       {{- range $oauth2Proxy.extraVolumeMounts }}
       {{- if eq .name "provider-ca" }}
       provider_ca_files=["{{ .mountPath }}"]
       {{- end }}
+      {{- end }}redirect_url="{{ include "mlflow-multitenant.externalURL" . }}/oauth2/callback"
+    # This will be templated and appended to content in the above configmap.
+    # These fields are specific to your particular deployment case, so change them based on
+    #   how your OIDC provider is configured if you're not using Keycloak.
+    extraContent: |
+      provider="oidc"
+      provider_display_name="Keycloak"
+      {{- if .Values.keycloak.ingress.enabled }}
+      oidc_issuer_url="https://{{ .Values.keycloak.ingress.hostname }}/realms/{{ .Values.keycloakJob.realm }}"
+      {{- else }}
+      oidc_issuer_url="https://{{ include "common.names.fullname" (dict "Values" .Values.keycloak "Chart" .Subcharts.keycloak.Chart "Release" .Release) }}.{{ .Release.Namespace }}/realms/{{ .Values.keycloakJob.realm }}"
       {{- end }}
+      scope="profile roles profile email openid"
       pass_access_token=true
       email_domains=["*"]
-      exchange_offline_jwt_bearer_tokens=true
   extraVolumes:
   - name: provider-ca
     secret:

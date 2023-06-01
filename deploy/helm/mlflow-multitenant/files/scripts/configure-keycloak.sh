@@ -107,7 +107,7 @@ done
 kcadm.sh config credentials \
     --server "${KEYCLOAK_URL}" \
     --realm master \
-    --user admin \
+    --user "${KEYCLOAK_ADMIN_USER}" \
     --password "${KEYCLOAK_ADMIN_PASSWORD}" \
     --client admin-cli
 
@@ -115,9 +115,11 @@ kcadm.sh config credentials \
 ensure-realm "${MLFLOW_REALM}"
 ensure-client "${MLFLOW_REALM}" "${MLFLOW_CLIENT_ID}" "${MLFLOW_CALLBACK_URL}" /tmp
 
-while read -r client_id callback_url ; do
-    ensure-client "${MLFLOW_REALM}" "${client_id}" "${callback_url}" "/tmp/extra-clients/${client_id}"
-done <<< "${EXTRA_CLIENTS:-}"
+if [ -n "${EXTRA_CLIENTS:-}" ]; then
+    while read -r client_id callback_url ; do
+        ensure-client "${MLFLOW_REALM}" "${client_id}" "${callback_url}" "/tmp/extra-clients/${client_id}"
+    done <<< "${EXTRA_CLIENTS:-}"
+fi
 
 
 for role in ${CREATE_ROLES:-}; do

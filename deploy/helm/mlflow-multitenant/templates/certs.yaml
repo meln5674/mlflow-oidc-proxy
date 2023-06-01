@@ -37,7 +37,7 @@ spec:
 ---
 {{- end }}
 
-{{- if and .Values.keycloak.enabled .Values.keycloak.ingress.enabled }}
+{{- if and .Values.keycloak.enabled }}
 {{- $keycloakDot := .Subcharts.keycloak }}
 {{- $keycloakDot = set $keycloakDot "Template" .Template }}
 {{- $keycloakDot = set $keycloakDot "Values" .Values.keycloak }}
@@ -62,9 +62,13 @@ spec:
     group: cert-manager.io
   dnsNames:
   - {{ .Values.keycloak.ingress.hostname }}
+  {{- if .Values.keycloak.ingress.enabled }}
   {{- with .Values.keycloak.ingress.extraHosts }}
   {{- . | toYaml | nindent 2 }}
   {{- end }}
+  {{- end }}
+  - {{ include "common.names.fullname" $keycloakDot }}
+  - {{ include "common.names.fullname" $keycloakDot }}.{{ .Release.Namespace }}
   - {{ include "common.names.fullname" $keycloakDot }}.{{ .Release.Namespace }}.svc.cluster.local
 ---
 {{- end }}

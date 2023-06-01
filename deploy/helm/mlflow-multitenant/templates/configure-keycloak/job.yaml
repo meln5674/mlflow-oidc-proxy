@@ -43,6 +43,8 @@ spec:
       - name: config
         image: {{ .Values.keycloak.image.registry }}/{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag | default .Subcharts.keycloak.Chart.AppVersion }}
         env:
+        - name: KEYCLOAK_ADMIN_USER
+          value: {{ .Values.keycloak.auth.adminUser }}
         - name: KEYCLOAK_ADMIN_PASSWORD
           valueFrom:
             secretKeyRef:

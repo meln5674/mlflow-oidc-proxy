@@ -737,6 +737,22 @@ spec:
 		},
 	}
 
+	mlflowMultitenantDefaults = gingk8s.HelmRelease{
+		Name: "mlflow-multitenant",
+		Chart: &gingk8s.HelmChart{
+			LocalChartInfo: gingk8s.LocalChartInfo{
+				Path:             "deploy/helm/mlflow-multitenant",
+				DependencyUpdate: true,
+			},
+		},
+		UpgradeFlags: []string{"--wait-for-jobs", "--timeout=30m"},
+		Set: gingk8s.Object{
+			"mlflow-oidc-proxy.image.repository": mlflowOIDCProxyImage.WithTag(""),
+			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultExtraCustomImageTags()[0],
+			"keycloak.service.type":              "ClusterIP",
+		},
+	}
+
 	jupyterhubBaseSet = gingk8s.Object{
 		"proxy.service.type":       "ClusterIP",
 		"ingress.enabled":          "true",

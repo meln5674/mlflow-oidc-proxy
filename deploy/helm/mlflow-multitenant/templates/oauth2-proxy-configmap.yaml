@@ -10,4 +10,5 @@ metadata:
 data:
   oauth2_proxy.cfg: |
     {{- tpl $oauth2Proxy.configuration.content . | nindent 4 }}
+    {{- tpl $oauth2Proxy.configuration.extraContent . | nindent 4 }}
 {{- end }}

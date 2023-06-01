@@ -17,6 +17,9 @@ function get-secret {
 }
 
 get-secret "${SECRET_NAME}" /tmp client-id client-secret cookie-secret
-while read -r client_id secret_name ; do
-    get-secret "${secret_name}" "/tmp/extra-clients/${client_id}" client-id client-secret
-done <<< "${EXTRA_CLIENTS:-}"
+
+if [ -n "${EXTRA_CLIENTS:-}" ]; then
+    while read -r client_id secret_name ; do
+        get-secret "${secret_name}" "/tmp/extra-clients/${client_id}" client-id client-secret
+    done <<< "${EXTRA_CLIENTS:-}"
+fi

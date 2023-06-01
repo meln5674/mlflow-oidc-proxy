@@ -629,3 +629,40 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 
 	s.cases("mlflow-multitenant-robot-robot-1", "mlflow-multitenant-robot-robot-1")
 })
+
+var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
+	BeforeAll(func() {
+		gspec := gk8s.ForSpec()
+		gk8s := gspec
+
+		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
+
+		mlflowDepsID := gk8s.Release(clusterID, &mlflowMultitenantDeps, postgresImageIDs, certManagerImageIDs)
+
+		ingressNginxID := gk8s.Release(clusterID, &ingressNginx2, nginxImageID) //	certsID,
+
+		waitForIngressWebhookID := gk8s.ClusterAction(clusterID, "Wait for Ingress Webhook", gingk8s.ClusterAction(waitForIngressWebhook), ingressNginxID)
+
+		gk8s.Release(clusterID, &mlflowMultitenantDefaults,
+			mlflowDepsID,
+			oauth2ProxyImageID,
+			mlflowOIDCProxyImageID,
+			waitForIngressWebhookID,
+			mlflowImageID,
+			keycloakImageID,
+			kubectlImageID,
+			minioImageIDs,
+			redisImageID,
+		)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		DeferCleanup(cancel)
+		gk8s.Setup(ctx)
+	})
+
+	It("Should start", func() {
+		// This test deliberately left blank
+
+		// We are just testing that running "helm install" without any additional changes actually starts into a valid state where all of the pods are running
+	})
+})
