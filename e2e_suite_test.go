@@ -99,6 +99,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	gk8s.Release(clusterID, &kubeIngressProxy) // , ingressNginxID)
 
 	gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
+	gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
 
 	gk8s.Options(gingk8s.SuiteOpts{
 		// NoSuiteCleanup: true,
@@ -117,6 +118,11 @@ var (
 
 	watchPods = &gingk8s.KubectlWatcher{
 		Kind:  "pods",
+		Flags: []string{"--all-namespaces"},
+	}
+
+	watchEvents = &gingk8s.KubectlWatcher{
+		Kind:  "events",
 		Flags: []string{"--all-namespaces"},
 	}
 
@@ -734,6 +740,8 @@ spec:
 			"mlflow.tenants[0].name": "Tenant 1",
 			"mlflow.tenants[1].id":   "tenant-2",
 			"mlflow.tenants[1].name": "Tenant 2",
+
+			"minio.resources.requests.memory": "250Mi",
 		},
 	}
 
