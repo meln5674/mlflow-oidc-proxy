@@ -1,0 +1,293 @@
+name: CD
+
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags: [ 'v*.*.*' ]
+
+env:
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
+
+  HELM_REPO: "oci://ghcr.io/${{ github.repository }}/charts"
+
+  GO_VERSION: 1.20.4
+
+  GOPRIVATE: 'github.com/meln5674/*'
+
+  HELM_VERSION: v3.12.0
+
+  COSIGN_VERSION: v1.13.0
+
+  YQ_VERSION: v4.27.2
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Install deps
+      - name: Install Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: '${{ env.HELM_VERSION }}'
+      
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '^${{ env.GO_VERSION }}'
+
+      - name: Install Dependencies
+        run: |
+          make deps 
+
+      # Run Linter
+      - name: Lint standalone chart
+        run: |
+          cd deploy/helm/mlflow-oidc-proxy
+          helm dependency update
+          helm-hog test --no-apply --batch --parallel=0
+      - name: Lint omnibus dependencies chart
+        run: |
+          cd deploy/helm/mlflow-multitenant-deps
+          helm lint .
+          helm template .
+      - name: Lint omnibus chart
+        run: |
+          cd deploy/helm/mlflow-multitenant
+          helm dependency update
+          helm-hog test --no-apply --batch --parallel=0
+
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+
+
+      # Install Deps
+
+      # Workaround: https://github.com/docker/build-push-action/issues/461
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@79abd3f86f79a9d68a23c75a09a9a85889262adf
+
+      - name: Install Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: '${{ env.HELM_VERSION }}'
+      
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '^${{ env.GO_VERSION }}'
+
+      - name: Install Dependencies
+        run: |
+          make deps 
+
+      # Tests
+      - name: Unit Tests
+        run: |
+          make test
+      - name: End-to-End Tests
+        run: |
+          make e2e
+      
+
+  docker:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # This is used to complete the identity challenge
+      # with sigstore/fulcio when running outside of PRs.
+      id-token: write
+
+    steps:
+      # Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+
+
+      # Install Deps
+
+      # Install the cosign tool except on PR
+      # https://github.com/sigstore/cosign-installer
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@7e0881f8fe90b25e305bbf0309761e9314607e25
+        with:
+          cosign-release: '${{ env.COSIGN_VERSION }}'
+
+      # Workaround: https://github.com/docker/build-push-action/issues/461
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@79abd3f86f79a9d68a23c75a09a9a85889262adf
+
+      - name: Install Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: '${{ env.HELM_VERSION }}'
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '^${{ env.GO_VERSION }}'
+
+      - name: Install Dependencies
+        run: |
+          make deps 
+
+
+      # Configuration/metdata
+
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@28218f9b04b4f3f62068d7b6ce6ca5b26e35336c
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Get Tag
+        id: tagName
+        uses: olegtarasov/get-tag@v2.1
+
+      # Extract metadata (tags, labels) for Docker
+      # https://github.com/docker/metadata-action
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=sha,format=long,prefix=
+
+
+
+      # Build and push Docker image with Buildx (don't push on PR)
+      # https://github.com/docker/build-push-action
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@ac9327eae2b366085ac7f6a2d02df8aa8ead720a
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # Sign the resulting Docker image digest except on PRs.
+      # This will only write to the public Rekor transparency log when the Docker
+      # repository is public to avoid leaking data.  If you would like to publish
+      # transparency data even for private images, pass --force to cosign below.
+      # https://github.com/sigstore/cosign
+      - name: Sign the published Docker image
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        # This step uses the identity token to provision an ephemeral certificate
+        # against the sigstore community Fulcio instance.
+        run: echo "${{ steps.meta.outputs.tags }}" | xargs -I {} cosign sign {}@${{ steps.build-and-push.outputs.digest }}
+  helm:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Get Tag
+        id: tagName
+        uses: olegtarasov/get-tag@v2.1
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+
+      # Install Deps
+      - name: Install Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: '${{ env.HELM_VERSION }}'
+
+      - name: Install YQ
+        uses: chrisdickinson/setup-yq@latest
+        with:
+          yq-version: '${{ env.YQ_VERSION }}'
+
+
+
+      # Release charts
+      - name: Push Charts
+        env:
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+        run: |
+          set -x
+
+          helm registry login "${REGISTRY}" -u "${GITHUB_ACTOR}" -p "${GITHUB_TOKEN}"
+
+          GIT_TAG="${{ steps.tagName.outputs.tag }}"
+          CHART_APPVERSION="${GIT_TAG:-${GITHUB_SHA}}"
+          if [ -n "${GIT_TAG}" ]; then
+            NEW_VERSION_EXPR='"'"${GIT_TAG}"'"'
+          else
+            NEW_VERSION_EXPR='.version + "-'"${GITHUB_SHA}"'"'
+          fi
+          mkdir -p deploy/helm
+          for chart in mlflow-oidc-proxy mlflow-multitenant-deps mlflow-multitenant; do
+              yq -i '.version = '"${NEW_VERSION_EXPR}"'' "deploy/helm/${chart}/Chart.yaml"
+          done
+          yq -i '.appVersion = "'"${CHART_APPVERSION}"'"' "deploy/helm/mlflow-oidc-proxy/Chart.yaml"
+          STANDALONE_CHART_VERSION="$(yq '.version' 'deploy/helm/mlflow-oidc-proxy/Chart.yaml')"
+          yq -i '(.dependencies[] | select(.name == "mlflow-oidc-proxy")).version |= "'"${STANDALONE_CHART_VERSION}"'"' 'deploy/helm/mlflow-multitenant/Chart.yaml'
+          yq -i '(.dependencies[] | select(.name == "mlflow-oidc-proxy")).repository |= "'"${HELM_REPO}"'"' 'deploy/helm/mlflow-multitenant/Chart.yaml'
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo add zalando https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+          helm dependency build deploy/helm/mlflow-multitenant-deps
+          helm package deploy/helm/mlflow-oidc-proxy/ --destination bin
+          helm package deploy/helm/mlflow-multitenant-deps/ --destination bin
+          helm push bin/mlflow-oidc-proxy-*.tgz "${HELM_REPO}"
+          helm push bin/mlflow-multitenant-deps-*.tgz "${HELM_REPO}"
+          rm -rf bin/*.tgz # The wildcard below matches the deps chart, this is a hack-y workaround
+          helm dependency build deploy/helm/mlflow-multitenant
+          helm package deploy/helm/mlflow-multitenant/ --destination bin
+          helm push bin/mlflow-multitenant-*.tgz "${HELM_REPO}"
+
+
