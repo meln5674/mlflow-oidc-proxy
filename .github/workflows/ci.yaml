@@ -10,6 +10,7 @@ on:
   push:
     # Tags should be built by CD instead
     tags-ignore: ['*']
+    branches: ['*']
   pull_request: {}
 
 env:
