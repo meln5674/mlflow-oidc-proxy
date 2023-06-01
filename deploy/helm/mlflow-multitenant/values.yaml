@@ -272,6 +272,7 @@ oauth2-proxy:
     # These fields are specific to your particular deployment case, so change them based on
     #   how your OIDC provider is configured if you're not using Keycloak.
     extraContent: |
+      {{- if .Values.keycloak.enabled }}
       provider="oidc"
       provider_display_name="Keycloak"
       {{- if .Values.keycloak.ingress.enabled }}
@@ -280,6 +281,7 @@ oauth2-proxy:
       oidc_issuer_url="https://{{ include "common.names.fullname" (dict "Values" .Values.keycloak "Chart" .Subcharts.keycloak.Chart "Release" .Release) }}.{{ .Release.Namespace }}/realms/{{ .Values.keycloakJob.realm }}"
       {{- end }}
       scope="profile roles profile email openid"
+      {{- end }}
       pass_access_token=true
       email_domains=["*"]
   extraVolumes:
