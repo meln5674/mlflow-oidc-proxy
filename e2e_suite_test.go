@@ -538,7 +538,7 @@ spec:
 			"config.existingConfigMap.name": "mlflow-oidc-proxy",
 			"image.pullPolicy":              "Never",
 			"image.repository":              mlflowOIDCProxyImage.WithTag(""),
-			"image.tag":                     gingk8s.DefaultExtraCustomImageTags()[0],
+			"image.tag":                     gingk8s.DefaultExtraCustomImageTags[0],
 			// "image.tag":                     gingk8s.DefaultCustomImageTag,
 
 			"ingress.enabled":                  true,
@@ -616,7 +616,7 @@ spec:
 			"hostAliases[0].hostnames[0]":       "keycloak.mlflow-oidc-proxy-it.cluster",
 			"image.registry":                    "local.host",
 			"image.repository":                  "mlflow-oidc-proxy/oauth2-proxy",
-			"image.tag":                         gingk8s.DefaultExtraCustomImageTags()[0],
+			"image.tag":                         gingk8s.DefaultExtraCustomImageTags[0],
 			"image.pullPolicy":                  "Never",
 		},
 		Wait: []gingk8s.WaitFor{
@@ -704,14 +704,14 @@ spec:
 			"oauth2-proxy.configuration.sessionStoreType": "redis",
 			"oauth2-proxy.image.registry":                 "local.host",
 			"oauth2-proxy.image.repository":               "mlflow-oidc-proxy/oauth2-proxy",
-			"oauth2-proxy.image.tag":                      gingk8s.DefaultExtraCustomImageTags()[0],
+			"oauth2-proxy.image.tag":                      gingk8s.DefaultExtraCustomImageTags[0],
 			"oauth2-proxy.image.pullPolicy":               "Never",
 			"oauth2-proxy.hostAliases[0].ip":              getIngressControllerIP,
 			"oauth2-proxy.hostAliases[0].hostnames[0]":    "keycloak.mlflow-oidc-proxy-it.cluster",
 
 			"mlflow-oidc-proxy.image.pullPolicy": "Never",
 			"mlflow-oidc-proxy.image.repository": mlflowOIDCProxyImage.WithTag(""),
-			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultExtraCustomImageTags()[0],
+			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultExtraCustomImageTags[0],
 			//"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultCustomImageTag,
 			"mlflow-oidc-proxy.config.yaml.tls.terminated":                               true,
 			"mlflow-oidc-proxy.config.yaml.robots.robots[0].name":                        "robot-1",
@@ -748,7 +748,7 @@ spec:
 		UpgradeFlags: []string{"--wait-for-jobs", "--timeout=30m"},
 		Set: gingk8s.Object{
 			"mlflow-oidc-proxy.image.repository": mlflowOIDCProxyImage.WithTag(""),
-			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultExtraCustomImageTags()[0],
+			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultExtraCustomImageTags[0],
 			"keycloak.service.type":              "ClusterIP",
 		},
 	}
