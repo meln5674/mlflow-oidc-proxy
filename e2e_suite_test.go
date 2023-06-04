@@ -1104,3 +1104,7 @@ func mlflowSet(tenant int) gingk8s.Object {
 		"requirements.boto3":           "",
 	}
 }
+
+func DescribePods(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
+	return g.Kubectl(ctx, cluster, "describe", "pods").Run()
+}

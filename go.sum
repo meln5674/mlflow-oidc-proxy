@@ -56,8 +56,8 @@ github.com/ledongthuc/pdf v0.0.0-20220302134840-0c2507a12d80 h1:6Yzfa6GP0rIo/kUL
 github.com/ledongthuc/pdf v0.0.0-20220302134840-0c2507a12d80/go.mod h1:imJHygn/1yfhB7XSJJKlFZKl/J+dCPAknuiaGOshXAs=
 github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=
 github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
-github.com/meln5674/gingk8s v0.0.0-20230601155910-1e59a3561e38 h1:09OlmFcWTnMcY2PDVPCCECCREiRMCWjReljks7IeerM=
-github.com/meln5674/gingk8s v0.0.0-20230601155910-1e59a3561e38/go.mod h1:UsrRWSpsvLed6bFz1xBORkkVxUlIkIfaA6gzemuw3kE=
+github.com/meln5674/gingk8s v0.0.0-20230604225115-3d8743f55598 h1:Vyz7sPp24yFLGdvvcS3t5lDwEixnGIj3zybl3dxacz0=
+github.com/meln5674/gingk8s v0.0.0-20230604225115-3d8743f55598/go.mod h1:UsrRWSpsvLed6bFz1xBORkkVxUlIkIfaA6gzemuw3kE=
 github.com/meln5674/godag v0.2.0 h1:5n9az5FSbf1HpytU8EYqExM4RzUI30sNCmBXWv0Ohr8=
 github.com/meln5674/godag v0.2.0/go.mod h1:QMuZ8E+mtPYjoJkmkC/9rMgYNly0PE5ePRSz4ZgAOVI=
 github.com/meln5674/gosh v0.0.0-20230418002009-f731b8b62575 h1:ISvjhVD+W1vfvQO9Yy9ysGCxUhhxDG+l+Pmd1F0xJmc=
