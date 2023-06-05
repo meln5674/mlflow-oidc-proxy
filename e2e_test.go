@@ -655,13 +655,13 @@ var _ = FDescribe("Omnibus setup in Default Configuration", Ordered, func() {
 		gk8s.ClusterAction(clusterID, "Keycloak 1 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-1", RetryPeriod: 15 * time.Second})
 		gk8s.ClusterAction(clusterID, "Keycloak Configuration Job Logs", &gingk8s.KubectlLogger{
 			Kind:        "job",
-			Name:        "mlflow-multitenant-configure-keycloak",
+			Name:        "mlflow-multitenant-configure-keycloak-1",
 			RetryPeriod: 15 * time.Second,
 			Flags:       []string{"-c", "config"},
 		})
 		gk8s.ClusterAction(clusterID, "Minio Configuration Job Logs", &gingk8s.KubectlLogger{
 			Kind:        "job",
-			Name:        "mlflow-multitenant-configure-minio",
+			Name:        "mlflow-multitenant-configure-minio-1",
 			RetryPeriod: 15 * time.Second,
 			Flags:       []string{"-c", "config"},
 		})
