@@ -636,7 +636,7 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 	s.cases("mlflow-multitenant-robot-robot-1", "mlflow-multitenant-robot-robot-1")
 })
 
-var _ = FDescribe("Omnibus setup in Default Configuration", Ordered, func() {
+var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
 		gk8s := gspec
