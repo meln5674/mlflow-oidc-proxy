@@ -238,10 +238,10 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	// The file browser loads so slowly, that by the time we've opened a terminal on a pre-warmed instance, it re-navigates to the cached location after we've already clicked the root button
 	// There doesn't seem to be any obvious element whose existence indicates the browser is actually finished loading
 	time.Sleep(15 * time.Second)
-	Expect(s.g.Kubectl(context.TODO(), &cluster, "describe", "pod", "jupyterhub-tenant-2d1").Run()).To(Succeed())
+	Expect(s.g.Kubectl(context.TODO(), &cluster, "describe", "pod", "jupyter-tenant-2d1").Run()).To(Succeed())
 	rootFolderButton := ".jp-BreadCrumbs-home"
 	// This has a very long timeout because on github actions, the server pod takes a long time to provision
-	Eventually(rootFolderButton, "5m").Should(b.Exist())
+	Eventually(rootFolderButton, "1m").Should(b.Exist())
 	// When running headless, for whatever reason,
 	// the button doesn't immediately generate a layout, which causes the scrollIntoView to fail
 	time.Sleep(15 * time.Second)
