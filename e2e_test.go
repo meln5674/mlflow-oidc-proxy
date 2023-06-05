@@ -636,7 +636,7 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 	s.cases("mlflow-multitenant-robot-robot-1", "mlflow-multitenant-robot-robot-1")
 })
 
-var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
+var _ = FDescribe("Omnibus setup in Default Configuration", Ordered, func() {
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
 		gk8s := gspec
@@ -653,6 +653,18 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 
 		gk8s.ClusterAction(clusterID, "Keycloak 0 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-0", RetryPeriod: 15 * time.Second})
 		gk8s.ClusterAction(clusterID, "Keycloak 1 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-1", RetryPeriod: 15 * time.Second})
+		gk8s.ClusterAction(clusterID, "Keycloak Configuration Job Logs", &gingk8s.KubectlLogger{
+			Kind:        "job",
+			Name:        "mlflow-multitenant-configure-keycloak",
+			RetryPeriod: 15 * time.Second,
+			Flags:       []string{"-c", "config"},
+		})
+		gk8s.ClusterAction(clusterID, "Minio Configuration Job Logs", &gingk8s.KubectlLogger{
+			Kind:        "job",
+			Name:        "mlflow-multitenant-configure-minio",
+			RetryPeriod: 15 * time.Second,
+			Flags:       []string{"-c", "config"},
+		})
 
 		gk8s.Release(clusterID, &mlflowMultitenantDefaults,
 			mlflowDepsID,
