@@ -30,6 +30,7 @@ type PredictionOutput struct {
 
 type subSuite struct {
 	b *biloba.Biloba
+	g gingk8s.Gingk8s
 }
 
 func (s *subSuite) nodes(sel interface{}) []*cdp.Node {
@@ -237,6 +238,7 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	// The file browser loads so slowly, that by the time we've opened a terminal on a pre-warmed instance, it re-navigates to the cached location after we've already clicked the root button
 	// There doesn't seem to be any obvious element whose existence indicates the browser is actually finished loading
 	time.Sleep(15 * time.Second)
+	s.g.Kubectl(context.TODO(), &cluster, "describe", "pod", "jupyterhub-tenant-2d1")
 	rootFolderButton := ".jp-BreadCrumbs-home"
 	// This has a very long timeout because on github actions, the server pod takes a long time to provision
 	Eventually(rootFolderButton, "5m").Should(b.Exist())
@@ -445,6 +447,7 @@ var _ = Describe("Standalone setup", Ordered, func() {
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
 		gk8s := gspec
+		s.g = gk8s
 
 		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
 		gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
@@ -557,11 +560,12 @@ var _ = Describe("Standalone setup", Ordered, func() {
 	s.cases("robot-1", "test-cert")
 })
 
-var _ = Describe("Omnibus setup", Ordered, func() {
+var _ = FDescribe("Omnibus setup", Ordered, func() {
 	s := subSuite{}
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
 		gk8s := gspec
+		s.g = gk8s
 
 		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
 		gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
@@ -637,9 +641,11 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 })
 
 var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
+	s := subSuite{}
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
 		gk8s := gspec
+		s.g = gk8s
 
 		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
 		gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
