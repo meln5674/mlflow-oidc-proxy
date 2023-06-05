@@ -239,6 +239,7 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	// There doesn't seem to be any obvious element whose existence indicates the browser is actually finished loading
 	time.Sleep(15 * time.Second)
 	Expect(s.g.Kubectl(context.TODO(), &cluster, "describe", "pod", "jupyter-tenant-2d1").Run()).To(Succeed())
+	Expect(s.g.Kubectl(context.TODO(), &cluster, "describe", "nodes").Run()).To(Succeed())
 	rootFolderButton := ".jp-BreadCrumbs-home"
 	// This has a very long timeout because on github actions, the server pod takes a long time to provision
 	Eventually(rootFolderButton, "1m").Should(b.Exist())
