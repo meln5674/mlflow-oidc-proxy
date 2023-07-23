@@ -1,8 +1,8 @@
 package proxy
 
 import (
-	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -17,6 +17,7 @@ import (
 	"github.com/Masterminds/sprig"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
+	"github.com/meln5674/gotoken"
 )
 
 const (
@@ -114,9 +115,8 @@ type ProxyState struct {
 	Tenants map[string]*ProxyTenantState
 	BaseURL *url.URL
 	*http.ServeMux
-	Log          *log.Logger
-	GetToken     TokenGetter
-	RobotsByCert map[string]Robot
+	Log      *log.Logger
+	GetToken gotoken.TokenGetter
 
 	HomeURL        string
 	BasePath       string
@@ -180,22 +180,52 @@ func NewProxy(config ProxyConfig, opts ProxyOptions) (*ProxyState, error) {
 	// We want the healthcheck endpoint to be acessible both externally and internally
 	state.LongHealthPath = JoinPaths(state.BaseURL.Path, "/health")
 	var ok bool
-	state.GetToken, ok = GetTokenGetter(config.OIDC.TokenMode, config.OIDC.TokenHeader)
+	getToken, ok := gotoken.GetTokenGetter(
+		config.OIDC.TokenMode,
+		&gotoken.TokenGetterArgs{
+			HeaderName:               config.OIDC.TokenHeader,
+			InsecureSkipVerification: true,
+			Parser:                   jwt.NewParser(),
+		},
+	)
 	if !ok {
 		return nil, fmt.Errorf("Invalid token mode: %s", config.OIDC.TokenMode)
 	}
-	if len(config.Robots.Robots) != 0 && !config.TLS.Enabled && !config.TLS.Terminated {
-		return nil, fmt.Errorf("Robots require TLS. If this server has TLS terminated for it, set tls.terminated: true to silence this error")
+	if len(config.Robots.Robots) == 0 {
+		state.GetToken = getToken
+		return state, nil
 	}
-	state.RobotsByCert = make(map[string]Robot, len(config.Robots.Robots))
-	for _, robot := range config.Robots.Robots {
+
+	getterChain := gotoken.TokenGetterChain{
+		Getters: []gotoken.TokenGetter{
+			getToken,
+		},
+	}
+
+	robots := make([]gotoken.Robot, len(config.Robots.Robots))
+	for ix := range config.Robots.Robots {
+		robot := config.Robots.Robots[ix]
 		if robot.Cert.Raw == "" {
 			return nil, fmt.Errorf("Robot %s is missing certPath", robot.Name)
 		}
-		derBase64 := base64.StdEncoding.EncodeToString(robot.Cert.Inner.Raw)
-		state.RobotsByCert[derBase64] = robot
+		robots[ix] = gotoken.Robot{
+			Name:  robot.Name,
+			Cert:  robot.Cert.Inner,
+			Token: &robot.Token.Inner,
+		}
 	}
+	table := gotoken.MakeRobotLookupTable(robots)
+	var robotGetter gotoken.TokenGetter
+	if config.TLS.Enabled {
+		robotGetter = gotoken.GetRobotTLSToken(table)
+	} else if config.TLS.Terminated {
+		robotGetter = gotoken.GetRobotTLSTerminatedToken(config.Robots.CertificateHeader, table)
+	} else {
+		return nil, fmt.Errorf("Robots require TLS. If this server has TLS terminated for it, set tls.terminated: true to silence this error")
+	}
+	getterChain.Getters = append(getterChain.Getters, robotGetter)
 
+	state.GetToken = getterChain.Getter()
 	return state, nil
 }
 
@@ -479,20 +509,6 @@ func (p *ProxyState) MutateRequest(w http.ResponseWriter, req *http.Request, pat
 	return "", nil
 }
 
-func (p *ProxyState) ExtractClaims(r *http.Request) (token *jwt.Token, hasToken bool, err error) {
-	tokenString := p.GetToken(r)
-	if tokenString == "" {
-		return nil, false, nil
-	}
-	claims := make(jwt.MapClaims)
-	// TODO: Deal with signature
-	token, _, err = jwt.NewParser().ParseUnverified(tokenString, claims)
-	if err != nil {
-		return nil, true, err
-	}
-	return token, true, nil
-}
-
 func (p *ProxyState) MergeURLs(dest, src *url.URL) {
 	dest.Scheme = src.Scheme
 	dest.Opaque = src.Opaque
@@ -605,19 +621,12 @@ func (p *ProxyState) EnsureRequestID(w http.ResponseWriter, req *http.Request) s
 }
 
 func (p *ProxyState) EnsureToken(w http.ResponseWriter, req *http.Request, requestID string) *jwt.Token {
-	token, hasToken, err := p.ExtractClaims(req)
-	if !hasToken && err == nil {
-		p.Log.Printf("Looking for robot cert, https: %v\n", p.Config.TLS.Enabled)
-		robotCert, hasRobotCert, err2 := GetRobotCert(p.Config.Robots.CertificateHeader, p.Config.TLS.Enabled, req)
-		err = err2
-		if hasRobotCert && err == nil {
-			derBase64 := base64.StdEncoding.EncodeToString(robotCert.Raw)
-			robot, ok := p.RobotsByCert[derBase64]
-			if ok {
-				token = &robot.Token.Inner
-				hasToken = true
-			}
-		}
+	token, hasToken, err := p.GetToken(req)
+	if errors.Is(err, gotoken.ErrNoSuchRobot) {
+		p.Log.Printf("Got unknown robot cert(Request ID: %s): %v\n", requestID, err)
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(fmt.Sprintf("Invalid token. Request ID %s", requestID)))
+		return nil
 	}
 	if err != nil {
 		p.Log.Printf("Got invalid token (Request ID: %s): %v\n", requestID, err)
@@ -681,9 +690,9 @@ func (p *ProxyState) ListenAndServe() error {
 		Handler: p,
 	}
 	if p.Config.TLS.Enabled {
-		fmt.Printf("Listening on %s (TLS)\n", p.Config.HTTP.Address.Inner.String())
+		p.Log.Printf("Listening on %s (TLS)\n", p.Config.HTTP.Address.Inner.String())
 		return server.ListenAndServeTLS(p.Config.TLS.CertFile, p.Config.TLS.KeyFile)
 	}
-	fmt.Printf("Listening on %s (Plaintext)\n", p.Config.HTTP.Address.Inner.String())
+	p.Log.Printf("Listening on %s (Plaintext)\n", p.Config.HTTP.Address.Inner.String())
 	return server.ListenAndServe()
 }

@@ -266,6 +266,7 @@ func testUserAndRobot(p *proxySpecState, f func()) {
 var _ = Describe("The MLFLow OIDC Proxy", func() {
 
 	var s proxySpecState
+	var cfg proxy.ProxyConfig
 
 	BeforeEach(func() {
 		s = proxySpecState{
@@ -280,15 +281,13 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 		parsedTenant2URL, err := new(proxy.URL).Parse(fakeMLFlow2.URL)
 		Expect(err).ToNot(HaveOccurred())
 
-		cfg := proxy.ProxyConfig{
+		cfg = proxy.ProxyConfig{
 			HTTP: proxy.ProxyHTTPConfig{
 				ExternalURL: *parsedExternalURL,
 			},
 			TLS: proxy.ProxyTLSConfig{
-				Enabled:    s.tls,
-				Terminated: !s.tls,
-				CertFile:   suiteCommonVars.ServerCertPath,
-				KeyFile:    suiteCommonVars.ServerCertPath,
+				CertFile: suiteCommonVars.ServerCertPath,
+				KeyFile:  suiteCommonVars.ServerCertPath,
 			},
 			MLFlow: proxy.ProxyMLFlowConfig{
 				Tenants: []proxy.ProxyMLFlowTenant{
@@ -337,27 +336,29 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 
 		Expect(cfg.ApplyDefaults()).To(Succeed())
 
-		opts := proxy.ProxyOptions{
-			Log: log.New(GinkgoWriter, "", log.LstdFlags),
-		}
-
-		s.srv, err = proxy.NewProxy(cfg, opts)
-		Expect(err).ToNot(HaveOccurred())
-		s.rec = httptest.NewRecorder()
-		s.rec.Body = bytes.NewBuffer([]byte{})
-
 	})
 
 	JustBeforeEach(func() {
+		var err error
+
 		var target string
 		if s.tls {
 			target = "https://"
 		} else {
 			target = "http://"
 		}
+
+		cfg.TLS.Enabled = s.tls
+		cfg.TLS.Terminated = !s.tls
 		target += "foo"
 		target += s.target
 		s.req = httptest.NewRequest(s.method, target, s.body)
+		s.srv, err = proxy.NewProxy(cfg, proxy.ProxyOptions{
+			Log: log.New(GinkgoWriter, "", log.LstdFlags),
+		})
+		Expect(err).ToNot(HaveOccurred())
+		s.rec = httptest.NewRecorder()
+		s.rec.Body = bytes.NewBuffer([]byte{})
 
 		for k, v := range s.headers {
 			s.req.Header.Add(k, v)
