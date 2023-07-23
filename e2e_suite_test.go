@@ -905,6 +905,17 @@ spec:
 		&gingk8s.ThirdPartyImage{Name: "quay.io/minio/mc:RELEASE.2023-04-12T02-21-51Z"},
 		&gingk8s.ThirdPartyImage{Name: "quay.io/minio/minio:RELEASE.2023-04-13T03-08-07Z"},
 	}
+
+	waitForPostgresDeletion = gingk8s.ClusterCleanupAction(func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
+		return gosh.FanOut(
+			g.KubectlWait(ctx, cluster, gingk8s.WaitFor{Resource: "sts/mlflow-multitenant-postgres", For: gingk8s.StringObject{"delete": ""}}),
+			g.KubectlWait(ctx, cluster, gingk8s.WaitFor{Resource: "endpoints/mlflow-multitenant-postgres", For: gingk8s.StringObject{"delete": ""}}),
+			g.KubectlWait(ctx, cluster, gingk8s.WaitFor{Resource: "sts/postgres-postgres", For: gingk8s.StringObject{"delete": ""}}),
+			g.KubectlWait(ctx, cluster, gingk8s.WaitFor{Resource: "endpoints/postgres-postgres", For: gingk8s.StringObject{"delete": ""}}),
+			g.Kubectl(ctx, cluster, "delete", "pvc", "--all"),
+			g.Kubectl(ctx, cluster, "delete", "pods", "-lcomponent=singleuser-server"),
+		).Run()
+	})
 )
 
 func restartOAuth2Proxy(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {

@@ -11,7 +11,7 @@ require (
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/uuid v1.3.0
-	github.com/meln5674/gingk8s v0.0.0-20230604225115-3d8743f55598
+	github.com/meln5674/gingk8s v0.0.0-20230723192727-4124d1157890
 	github.com/meln5674/gosh v0.0.0-20230418002009-f731b8b62575
 	github.com/meln5674/gotoken v0.0.0-20230722204619-acad9c07eca2
 	github.com/onsi/biloba v0.1.4
@@ -48,7 +48,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/meln5674/godag v0.2.0 // indirect
+	github.com/meln5674/godag v0.3.0-rc2 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -79,7 +79,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
-
-replace github.com/meln5674/gingk8s v0.0.0-20230604225115-3d8743f55598 => ../gingk8s
-
-replace github.com/meln5674/godag v0.2.0 => ../godag

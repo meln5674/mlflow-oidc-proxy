@@ -475,7 +475,9 @@ var _ = Describe("Standalone setup", Ordered, func() {
 
 		postgresOperatorID := gk8s.Release(clusterID, &postgresOperator, certsID, postgresImageIDs)
 
-		postgresID := gk8s.Manifests(clusterID, &postgres, postgresOperatorID)
+		waitForPostgresDeletionID := gk8s.ClusterAction(clusterID, "Wait for postgres to be cleaned up before deleting operator", waitForPostgresDeletion, postgresOperatorID)
+
+		postgresID := gk8s.Manifests(clusterID, &postgres, postgresOperatorID, waitForPostgresDeletionID)
 
 		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", postgresSecretsReady, postgresID)
 
@@ -561,7 +563,7 @@ var _ = Describe("Standalone setup", Ordered, func() {
 	s.cases("robot-1", "test-cert")
 })
 
-var _ = FDescribe("Omnibus setup", Ordered, func() {
+var _ = Describe("Omnibus setup", Ordered, func() {
 	s := subSuite{}
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
@@ -584,6 +586,8 @@ var _ = FDescribe("Omnibus setup", Ordered, func() {
 
 		waitForIngressWebhookID := gk8s.ClusterAction(clusterID, "Wait for Ingress Webhook", gingk8s.ClusterAction(waitForIngressWebhook), ingressNginxID)
 
+		waitForPostgresDeletionID := gk8s.ClusterAction(clusterID, "Wait for postgres to be cleaned up before deleting operator", waitForPostgresDeletion, mlflowDepsID)
+
 		mlflowID := gk8s.Release(clusterID, &mlflowMultitenant,
 			mlflowDepsID,
 			oauth2ProxyImageID,
@@ -594,6 +598,7 @@ var _ = FDescribe("Omnibus setup", Ordered, func() {
 			kubectlImageID,
 			minioImageIDs,
 			redisImageID,
+			waitForPostgresDeletionID,
 		)
 
 		certsID := gk8s.Manifests(clusterID, &certsNoIssuer, mlflowDepsID, mlflowID)
@@ -673,6 +678,8 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 			Flags:       []string{"-c", "config"},
 		})
 
+		waitForPostgresDeletionID := gk8s.ClusterAction(clusterID, "Wait for postgres to be cleaned up before deleting operator", waitForPostgresDeletion, mlflowDepsID)
+
 		gk8s.Release(clusterID, &mlflowMultitenantDefaults,
 			mlflowDepsID,
 			oauth2ProxyImageID,
@@ -683,6 +690,7 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 			kubectlImageID,
 			minioImageIDs,
 			redisImageID,
+			waitForPostgresDeletionID,
 		)
 
 		ctx, cancel := context.WithCancel(context.Background())
