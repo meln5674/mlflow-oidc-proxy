@@ -663,8 +663,8 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 
 		waitForIngressWebhookID := gk8s.ClusterAction(clusterID, "Wait for Ingress Webhook", gingk8s.ClusterAction(waitForIngressWebhook), ingressNginxID)
 
-		gk8s.ClusterAction(clusterID, "Keycloak 0 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-0", RetryPeriod: 15 * time.Second})
-		gk8s.ClusterAction(clusterID, "Keycloak 1 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-1", RetryPeriod: 15 * time.Second})
+		// gk8s.ClusterAction(clusterID, "Keycloak 0 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-0", RetryPeriod: 15 * time.Second})
+		// gk8s.ClusterAction(clusterID, "Keycloak 1 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-1", RetryPeriod: 15 * time.Second})
 		gk8s.ClusterAction(clusterID, "Keycloak Configuration Job Logs", &gingk8s.KubectlLogger{
 			Kind:        "job",
 			Name:        "mlflow-multitenant-configure-keycloak-1",
