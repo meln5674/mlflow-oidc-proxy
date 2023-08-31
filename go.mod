@@ -11,7 +11,7 @@ require (
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/uuid v1.3.0
-	github.com/meln5674/gingk8s v0.0.0-20230723192727-4124d1157890
+	github.com/meln5674/gingk8s v0.0.0-20230831002844-f8cbdd0e2b61
 	github.com/meln5674/gosh v0.0.0-20230418002009-f731b8b62575
 	github.com/meln5674/gotoken v0.0.0-20230722204619-acad9c07eca2
 	github.com/onsi/biloba v0.1.4
