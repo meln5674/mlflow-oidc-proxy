@@ -60,7 +60,7 @@ jobs:
         run: |
           cd deploy/helm/mlflow-oidc-proxy
           helm dependency update
-          helm-hog test --no-apply --batch --parallel=0
+          helm-hog test --no-apply --batch --auto-remove-success --parallel=0
       - name: Lint omnibus dependencies chart
         run: |
           cd deploy/helm/mlflow-multitenant-deps
@@ -70,7 +70,7 @@ jobs:
         run: |
           cd deploy/helm/mlflow-multitenant
           helm dependency update
-          helm-hog test --no-apply --batch --parallel=0
+          helm-hog test --no-apply --batch --auto-remove-success --parallel=0
 
   test:
     runs-on: ubuntu-latest
