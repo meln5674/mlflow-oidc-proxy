@@ -110,7 +110,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 var (
 	cluster = gingk8s.KindCluster{
 		Name:                   "mlflow-oidc-proxy",
-		KindCommand:            gingk8s.DefaultKind,
+		KindCommand:            &gingk8s.KindCommand{Command: []string{"bin/kind"}},
 		TempDir:                "integration-test",
 		ConfigFilePath:         "integration-test/kind.config",
 		ConfigFileTemplatePath: "integration-test/kind.config.template",
