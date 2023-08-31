@@ -32,7 +32,8 @@ env:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
 
@@ -73,7 +74,8 @@ jobs:
           helm-hog test --no-apply --batch --auto-remove-success --parallel=0
 
   test:
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
 
