@@ -61,7 +61,7 @@ endif
 
 
 KIND_MIRROR ?= https://github.com/kubernetes-sigs/kind/releases/download
-KIND_VERSION ?= v0.20.0
+KIND_VERSION ?= v0.17.0
 KIND_URL ?= $(KIND_MIRROR)/$(KIND_VERSION)/kind-$(shell go env GOOS)-$(shell go env GOARCH)
 KIND ?= $(LOCALBIN)/kind
 $(KIND):  $(LOCALBIN)
