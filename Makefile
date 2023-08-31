@@ -21,21 +21,62 @@ show-coverage: coverprofile.out
 e2e: deps
 	bin/ginkgo run --cover --coverpkg=./,./pkg/proxy/ $(E2E_TEST_FLAGS) $(E2E_TEST_SUITES)
 
-HELM_HOG_VERSION ?= 3af9ec621dcc359e38e966a255571a39beefe624
+LOCALBIN ?= bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+GINKGO_URL ?= $(shell grep ginkgo go.mod | awk '{ print $$1 "/ginkgo@" $$2 }')
+GINKGO ?= $(LOCALBIN)/ginkgo
+$(GINKGO): $(LOCALBIN)
+	GOBIN=/tmp/ go install $(GINKGO_URL)
+	mv /tmp/ginkgo $(GINKGO)
+
+KUBECTL_MIRROR ?= https://dl.k8s.io/release
+KUBECTL_VERSION ?= v1.25.11
+KUBECTL_URL ?= $(KUBECTL_MIRROR)/$(KUBECTL_VERSION)/bin/$(shell go env GOOS)/$(shell go env GOARCH)/kubectl
+KUBECTL ?= $(LOCALBIN)/kubectl
+$(KUBECTL): $(LOCALBIN)
+	curl -vfL $(KUBECTL_URL) > $(KUBECTL)
+	chmod +x $(KUBECTL)
+
+
+HELM_MIRROR ?= https://get.helm.sh
+HELM_VERSION ?= v3.12.2
+ifeq ($(shell go env GOOS),windows)
+HELM_URL ?= $(HELM_MIRROR)/helm-$(HELM_VERSION)-$(shell go env GOOS)-$(shell go env GOARCH).zip
+else
+HELM_URL ?= $(HELM_MIRROR)/helm-$(HELM_VERSION)-$(shell go env GOOS)-$(shell go env GOARCH).tar.gz
+endif
+
+HELM ?= $(LOCALBIN)/helm
+$(HELM): $(LOCALBIN)
+ifeq ($(shell go env GOOS),windows)
+	curl -vfL $(HELM_URL) > $(HELM).zip
+	unzip $(HELM).zip -j -d /tmp/ -x helm-windows-$(go env GOARCH)/helm
+	mv helm-windows-$(go env GOARCH)/helm $(LOCALBIN)
+else
+	curl -vfL $(HELM_URL) | tar xz -C /tmp/ $(shell go env GOOS)-$(shell go env GOARCH)/helm
+	mv /tmp/$(shell go env GOOS)-$(shell go env GOARCH)/helm $(HELM)
+endif
 
 
 KIND_MIRROR ?= https://github.com/kubernetes-sigs/kind/releases/download
 KIND_VERSION ?= v0.20.0
 KIND_URL ?= $(KIND_MIRROR)/$(KIND_VERSION)/kind-$(shell go env GOOS)-$(shell go env GOARCH)
+KIND ?= $(LOCALBIN)/kind
+$(KIND):  $(LOCALBIN)
+	curl -vfL $(KIND_URL) > $(KIND)
+	chmod +x $(KIND)
+
+HELM_HOG_VERSION ?= 3af9ec621dcc359e38e966a255571a39beefe624
+HELM_HOG ?= $(LOCALBIN)/helm-hog
+$(HELM_HOG): $(LOCALBIN)
+	GOBIN=/tmp go install github.com/meln5674/helm-hog@$(HELM_HOG_VERSION)
+	mv /tmp/helm-hog $(HELM_HOG)
 
 .PHONY: deps
-deps:
-	mkdir -p bin
+deps: $(GINKGO) $(KUBECTL) $(HELM) $(KIND) $(HELM_HOG)
 	go mod download
-	grep ginkgo go.mod | awk '{ print $$1 "/ginkgo@" $$2 }' | GOBIN=$$PWD/bin xargs go install
-	go install github.com/meln5674/helm-hog@$(HELM_HOG_VERSION)
-	curl -vfL $(KIND_URL) > bin/kind
-	chmod +x bin/kind
 
 bin/mlflow-oidc-proxy:
 	go build -o bin/mlflow-oidc-proxy main.go

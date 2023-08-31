@@ -101,8 +101,17 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
 	gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
 
+	localKubectl := &gingk8s.KubectlCommand{
+		Command: []string{"bin/kubectl"},
+	}
+
 	gk8s.Options(gingk8s.SuiteOpts{
 		// NoSuiteCleanup: true,
+		Kubectl: localKubectl,
+		Helm: &gingk8s.HelmCommand{
+			Command: []string{"bin/helm"},
+		},
+		Manifests: localKubectl,
 	})
 	gk8s.Setup(ctx)
 })
