@@ -11,14 +11,18 @@ require (
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/uuid v1.3.0
-	github.com/meln5674/gingk8s v0.0.0-20230831002844-f8cbdd0e2b61
-	github.com/meln5674/gosh v0.0.0-20230418002009-f731b8b62575
 	github.com/meln5674/gotoken v0.0.0-20230722204619-acad9c07eca2
+	github.com/pkg/errors v0.9.1
+	github.com/spf13/pflag v1.0.5
+)
+
+// Tests
+require (
+	github.com/meln5674/gingk8s v0.0.0-20231007205525-3c90c4c88c5d
+	github.com/meln5674/gosh v0.0.0-20230418002009-f731b8b62575
 	github.com/onsi/biloba v0.1.4
 	github.com/onsi/ginkgo/v2 v2.11.0
 	github.com/onsi/gomega v1.27.8
-	github.com/pkg/errors v0.9.1
-	github.com/spf13/pflag v1.0.5
 )
 
 require (
@@ -48,7 +52,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/meln5674/godag v0.3.0-rc2 // indirect
+	github.com/meln5674/godag v0.3.0-rc4 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

@@ -50,6 +50,19 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	Expect(os.WriteFile("modules/oauth2-proxy/Dockerfile", []byte(oauth2Dockerfile), 0x755))
 
 	gk8s = gingk8s.ForSuite(GinkgoT())
+	localKubectl := &gingk8s.KubectlCommand{
+		Command: []string{"bin/kubectl"},
+	}
+
+	gk8s.Options(gingk8s.SuiteOpts{
+		// NoSuiteCleanup: true,
+		Kubectl: localKubectl,
+		Helm: &gingk8s.HelmCommand{
+			Command: []string{"bin/helm"},
+		},
+		Manifests:     localKubectl,
+		NoCacheImages: os.Getenv("IS_CI") != "",
+	})
 
 	keycloakSetupScript, err = os.ReadFile("integration-test/keycloak-setup.sh")
 	Expect(err).ToNot(HaveOccurred())
@@ -101,18 +114,6 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
 	gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
 
-	localKubectl := &gingk8s.KubectlCommand{
-		Command: []string{"bin/kubectl"},
-	}
-
-	gk8s.Options(gingk8s.SuiteOpts{
-		// NoSuiteCleanup: true,
-		Kubectl: localKubectl,
-		Helm: &gingk8s.HelmCommand{
-			Command: []string{"bin/helm"},
-		},
-		Manifests: localKubectl,
-	})
 	gk8s.Setup(ctx)
 })
 
