@@ -202,28 +202,56 @@ func NewProxy(config ProxyConfig, opts ProxyOptions) (*ProxyState, error) {
 		},
 	}
 
-	robots := make([]gotoken.Robot, len(config.Robots.Robots))
+	robots := make([]gotoken.Robot, 0, len(config.Robots.Robots))
+	symmetricRobots := make([]gotoken.SymmetricRobot, len(config.Robots.Robots))
 	for ix := range config.Robots.Robots {
 		robot := config.Robots.Robots[ix]
-		if robot.Cert.Raw == "" {
-			return nil, fmt.Errorf("Robot %s is missing certPath", robot.Name)
-		}
-		robots[ix] = gotoken.Robot{
-			Name:  robot.Name,
-			Cert:  robot.Cert.Inner,
-			Token: &robot.Token.Inner,
+		switch {
+		case robot.Cert.Raw != "":
+			robots = append(robots, gotoken.Robot{
+				Name:  robot.Name,
+				Cert:  robot.Cert.Inner,
+				Token: &robot.Token.Inner,
+			})
+		case robot.SecretToken.Token != "":
+			symmetricRobots = append(symmetricRobots, gotoken.SymmetricRobot{
+				Name:        robot.Name,
+				SecretToken: robot.SecretToken.Token,
+				Token:       &robot.Token.Inner,
+			})
+		default:
+
+			return nil, fmt.Errorf("Robot %s is missing both certPath and secretTokenPath", robot.Name)
 		}
 	}
-	table := gotoken.MakeRobotLookupTable(robots)
-	var robotGetter gotoken.TokenGetter
-	if config.TLS.Enabled {
-		robotGetter = gotoken.GetRobotTLSToken(table)
-	} else if config.TLS.Terminated {
-		robotGetter = gotoken.GetRobotTLSTerminatedToken(config.Robots.CertificateHeader, table)
+	if len(robots) != 0 {
+		table := gotoken.MakeRobotLookupTable(robots)
+		var robotGetter gotoken.TokenGetter
+		if config.TLS.Enabled {
+			robotGetter = gotoken.GetRobotTLSToken(table)
+		} else if config.TLS.Terminated {
+			robotGetter = gotoken.GetRobotTLSTerminatedToken(config.Robots.CertificateHeader, table)
+		} else {
+			return nil, fmt.Errorf("Robots require TLS. If this server has TLS terminated for it, set tls.terminated: true to silence this error")
+		}
+		getterChain.Getters = append(getterChain.Getters, robotGetter)
+	}
+	if len(symmetricRobots) != 0 {
+		fmt.Println("At least one symmetric robot")
+		symmetricTable := gotoken.MakeSymmetricRobotLookupTable(symmetricRobots)
+		symmetricRobotGetter := gotoken.GetSymmetricRobotToken(symmetricTable, gotoken.GetBearerTokenString())
+		getterChain.Getters = append(getterChain.Getters, symmetricRobotGetter)
+		// If OIDC tokens are passed as the authorization header, they can conflict with robot bearer tokens,
+		// so we have to explicitly enable checking the next token getter if an "invalid" token is found
+		if config.OIDC.TokenHeader == gotoken.HeaderAuthorization || config.OIDC.TokenMode == gotoken.TokenModeBearer {
+			fmt.Println("Symmetric Robot header and OIDC token header match")
+			getterChain.ContinueOnError = true
+		} else {
+			fmt.Println("Symmetric Robot header and OIDC token header no not match", config.OIDC.TokenHeader)
+		}
 	} else {
-		return nil, fmt.Errorf("Robots require TLS. If this server has TLS terminated for it, set tls.terminated: true to silence this error")
+		fmt.Println("No symmetric robots")
 	}
-	getterChain.Getters = append(getterChain.Getters, robotGetter)
 
 	state.GetToken = getterChain.Getter()
 	return state, nil
@@ -635,7 +663,7 @@ func (p *ProxyState) EnsureToken(w http.ResponseWriter, req *http.Request, reque
 		return nil
 	}
 	if !hasToken || token == nil {
-		p.Log.Printf("No token present, your authentication proxy and/or tls termination setup is broken, or you provided an invalid robot certificate (Request ID: %s): %v\n", requestID, err)
+		p.Log.Printf("No token present, your authentication proxy and/or tls termination setup is broken, or you provided an invalid robot certificate or token (Request ID: %s): %v\n", requestID, err)
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte(fmt.Sprintf("No token was provided, contact your administrator. Request ID %s", requestID)))
 		return nil

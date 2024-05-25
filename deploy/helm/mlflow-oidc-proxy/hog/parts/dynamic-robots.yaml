@@ -8,4 +8,23 @@ config:
             some: claim
           secret:
             name: foo
+        - name: robot-2
+          type: mtls
+          token:
+            some: claim
+          secret:
+            name: foo
+            key: bar
+        - name: robot-3
+          type: token
+          token:
+            some: claim
+          secret:
+            name: foo
+        - name: robot-3
+          type: token
+          token:
+            some: claim
+          secret:
+            name: foo
             key: bar

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/sprig"
+	"github.com/meln5674/gotoken"
 	"github.com/pkg/errors"
 )
 
@@ -34,7 +35,7 @@ Forbidden: You are not part of this tenant
 	// It assumes the server is being proxied by the OAuth2Proxy (https://github.com/oauth2-proxy/oauth2-proxy/) with --pass-access-token
 	DefaultTokenHeader = "X-Forwarded-Access-Token"
 	// DefaulTokenMode is the default value of the config oidc.tokenMode.
-	DefaultTokenMode = TokenModeRaw
+	DefaultTokenMode = gotoken.TokenModeRaw
 	// DefaultCerificate header is the default value of the config robots.certificateHeader
 	DefaultCertificateHeader = "Ssl-Client-Cert"
 )
@@ -169,13 +170,31 @@ func (c *CertificateFromPath) UnmarshalJSON(bytes []byte) error {
 	return nil
 }
 
+type SecretTokenFromPath struct {
+	Token string
+}
+
+func (c *SecretTokenFromPath) UnmarshalJSON(bytes []byte) error {
+	var path string
+	err := json.Unmarshal(bytes, &path)
+	if err != nil {
+		return err
+	}
+	tokenBytes, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	c.Token = string(tokenBytes)
+	return nil
+}
+
 type ProxyOIDCConfig struct {
-	TokenHeader    string      `json:"tokenHeader"`
-	TokenMode      TokenMode   `json:"tokenMode"`
-	WellKnownURL   URL         `json:"wellKnownURL"`
-	Policy         Template    `json:"policy"`
-	GetSubject     Template    `json:"getSubject"`
-	ExtraVariables interface{} `json:"extraVariables"`
+	TokenHeader    string            `json:"tokenHeader"`
+	TokenMode      gotoken.TokenMode `json:"tokenMode"`
+	WellKnownURL   URL               `json:"wellKnownURL"`
+	Policy         Template          `json:"policy"`
+	GetSubject     Template          `json:"getSubject"`
+	ExtraVariables interface{}       `json:"extraVariables"`
 }
 
 type ProxyMLFlowTenant struct {

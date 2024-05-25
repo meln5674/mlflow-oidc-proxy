@@ -173,7 +173,10 @@ robots:
     # The name of the robot. Arbitrary, but used in debugging printouts
   - name: <name>
     # The path to the TLS certificate to verify the robot user
-    certFile: </path/to/tls.crt>
+    certPath: </path/to/tls.crt>
+    # -OR-
+    # The path to the bearer token for this robot
+    secretTokenPath: </path/to/token>
     # The token claims
     token: 
       <claim>: <value>

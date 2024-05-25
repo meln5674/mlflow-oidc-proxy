@@ -386,7 +386,7 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	Expect(userField).To(b.HaveInnerText(expectedSubject))
 }
 
-func (s *subSuite) cases(robotSecretName string, caSecretName string) {
+func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSecretName string) {
 	var _ = BeforeEach(func() {
 		s.sessionSetup()
 		s.b.Prepare()
@@ -400,15 +400,22 @@ func (s *subSuite) cases(robotSecretName string, caSecretName string) {
 		})
 
 		It("should execute an mlflow jupyterlab notebook with a robot certificate", func(ctx context.Context) {
-			robotKey := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotSecretName, "tls.key")
-			robotCert := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotSecretName, "tls.crt")
+			robotKey := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotCertSecretName, "tls.key")
+			robotCert := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotCertSecretName, "tls.crt")
 			s.keycloakLogin(false)
 
 			s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_CLIENT_CERT_AND_KEY='%s' MLFLOW_TRACKING_URI='%s'`, robotKey+"\n"+robotCert, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "robot-1")
 		})
+
+		It("should execute an mlflow jupyterlab notebook with a robot token", func(ctx context.Context) {
+			robotToken := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotTokenSecretName, "token")
+			s.keycloakLogin(false)
+
+			s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_TOKEN='%s' MLFLOW_TRACKING_URI='%s'`, robotToken, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "robot-3")
+		})
 	})
 
-	var _ = Describe("Tenant-2", func() {
+	Describe("Tenant-2", func() {
 		It("Should not have access to the other MLFLow tenant using a generated token", func() {
 			b := s.b
 			mlflowTenantURL := fmt.Sprintf("https://%s/tenants/tenant-2/", oauth2Proxy.Set["ingress.hostname"])
@@ -416,8 +423,8 @@ func (s *subSuite) cases(robotSecretName string, caSecretName string) {
 
 		})
 		It("Should not have access to the other MLFLow tenant using a robot certificate", func(ctx context.Context) {
-			robotKey := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotSecretName, "tls.key")
-			robotCert := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotSecretName, "tls.crt")
+			robotKey := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotCertSecretName, "tls.key")
+			robotCert := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotCertSecretName, "tls.crt")
 			robotCA := gk8s.KubectlReturnSecretValue(ctx, &cluster, caSecretName, "ca.crt")
 
 			keypair, err := tls.X509KeyPair([]byte(robotCert), []byte(robotKey))
@@ -440,6 +447,30 @@ func (s *subSuite) cases(robotSecretName string, caSecretName string) {
 			Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
 
 		})
+
+		It("Should not have access to the other MLFLow tenant using a robot token", func(ctx context.Context) {
+			robotToken := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotTokenSecretName, "token")
+			robotCA := gk8s.KubectlReturnSecretValue(ctx, &cluster, caSecretName, "ca.crt")
+
+			pool := x509.NewCertPool()
+			Expect(pool.AppendCertsFromPEM([]byte(robotCA))).To(BeTrue())
+
+			mlflowTenantURL := fmt.Sprintf("https://%s/tenants/tenant-2/", oauth2Proxy.Set["ingress.hostname"])
+			client := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						RootCAs: pool,
+					},
+					Proxy: func(*http.Request) (*url.URL, error) { return url.Parse("http://localhost:8080") },
+				},
+			}
+			req, err := http.NewRequest(http.MethodGet, mlflowTenantURL, nil)
+			Expect(err).ToNot(HaveOccurred())
+			req.Header.Set("Authorization", "Bearer "+robotToken)
+			resp, err := client.Do(req)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
+		})
 	})
 }
 
@@ -453,11 +484,11 @@ var _ = Describe("Standalone setup", Ordered, func() {
 		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
 		gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
 
-		certManagerID := gk8s.Release(clusterID, &certManager, certManagerImageIDs)
+		certManagerID := gk8s.Release(clusterID, &certManager)
 
 		certsID := gk8s.Manifests(clusterID, &certs, certManagerID)
 
-		ingressNginxID := gk8s.Release(clusterID, &ingressNginx, certsID, nginxImageID)
+		ingressNginxID := gk8s.Release(clusterID, &ingressNginx, certsID)
 
 		gk8s.ClusterAction(
 			clusterID,
@@ -473,7 +504,7 @@ var _ = Describe("Standalone setup", Ordered, func() {
 			ingressNginxID,
 		)
 
-		postgresOperatorID := gk8s.Release(clusterID, &postgresOperator, certsID, postgresImageIDs)
+		postgresOperatorID := gk8s.Release(clusterID, &postgresOperator, certsID)
 
 		waitForPostgresDeletionID := gk8s.ClusterAction(clusterID, "Wait for postgres to be cleaned up before deleting operator", waitForPostgresDeletion, postgresOperatorID)
 
@@ -481,23 +512,21 @@ var _ = Describe("Standalone setup", Ordered, func() {
 
 		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", postgresSecretsReady, postgresID)
 
-		minioID := gk8s.Release(clusterID, &minio, minioImageIDs)
+		minioID := gk8s.Release(clusterID, &minio)
 
 		mlflowIDs := []gingk8s.ReleaseID{
 			gk8s.Release(clusterID, &mlflow[0],
 				minioID,
 				postgresID,
 				postgresSecretsReadyID,
-				mlflowImageID,
 			),
 			gk8s.Release(clusterID, &mlflow[1], minioID,
 				postgresID,
 				postgresSecretsReadyID,
-				mlflowImageID,
 			),
 		}
 
-		keycloakID := gk8s.Release(clusterID, &keycloak, postgresID, waitForIngressWebhookID, keycloakImageID)
+		keycloakID := gk8s.Release(clusterID, &keycloak, postgresID, waitForIngressWebhookID)
 
 		keycloakSetupID := gk8s.ClusterAction(
 			clusterID,
@@ -520,7 +549,7 @@ var _ = Describe("Standalone setup", Ordered, func() {
 		mlflowOIDCProxyID := gk8s.Release(clusterID, &mlflowOIDCProxy,
 			mlflowOIDCProxySetupID,
 			mlflowOIDCProxyConfigID,
-			mlflowOIDCProxyImageID,
+			certsID,
 		)
 
 		oauth2ProxySetupID := gk8s.ClusterAction(clusterID, "Generate OAuth2 Proxy ConfigMap", gingk8s.ClusterAction(oauth2ProxySetup))
@@ -533,34 +562,43 @@ var _ = Describe("Standalone setup", Ordered, func() {
 		oauth2ProxyID := gk8s.Release(clusterID, &oauth2Proxy,
 			keycloakID,
 			oauth2ProxyConfigID,
-			oauth2ProxyImageID,
 			keycloakSetupID, waitForIngressWebhookID,
-			redisImageID,
 		)
+
+		waitForOAuth2ProxyID := gk8s.ClusterAction(clusterID, "Wait for oauth2 proxy rollout", gingk8s.ClusterAction(func(gk8s gingk8s.Gingk8s, ctx context.Context, c gingk8s.Cluster) error {
+			return gk8s.Kubectl(ctx, c, "rollout", "status", "deploy/oauth2-proxy").Run()
+		}), oauth2ProxyID)
 
 		jupyterhubID := gk8s.Release(clusterID, &jupyterhub,
 			keycloakID,
-			jupyterhubImageID,
 			keycloakSetupID, waitForIngressWebhookID, postgresSecretsReadyID,
 		)
 
 		terminals := gingk8s.ResourceDependencies{
 			Releases: []gingk8s.ReleaseID{
 				jupyterhubID,
-				oauth2ProxyID,
 				mlflowOIDCProxyID,
 				mlflowIDs[0],
 				mlflowIDs[1],
+			},
+			ClusterActions: []gingk8s.ClusterActionID{
+				waitForOAuth2ProxyID,
 			},
 		}
 
 		gk8s.ClusterAction(clusterID, "Describe Pods on Failure", gingk8s.ClusterCleanupAction(DescribePods), &terminals)
 
+		gk8s.ClusterAction(clusterID, "MLFLow Tenant 1 Logs", &gingk8s.KubectlLogger{
+			Kind:        "deploy",
+			Name:        "mlflow-tenant-1",
+			RetryPeriod: 15 * time.Second,
+		}, mlflowIDs[0])
+
 		ctx, cancel := context.WithCancel(context.Background())
 		DeferCleanup(cancel)
 		gk8s.Setup(ctx)
 	})
-	s.cases("robot-1", "test-cert")
+	s.cases("robot-1", "robot-3", "test-cert")
 })
 
 var _ = Describe("Omnibus setup", Ordered, func() {
@@ -573,9 +611,9 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
 		gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
 
-		mlflowDepsID := gk8s.Release(clusterID, &mlflowMultitenantDeps, postgresImageIDs, certManagerImageIDs)
+		mlflowDepsID := gk8s.Release(clusterID, &mlflowMultitenantDeps)
 
-		ingressNginxID := gk8s.Release(clusterID, &ingressNginx2, nginxImageID) //	certsID,
+		ingressNginxID := gk8s.Release(clusterID, &ingressNginx2)
 
 		gk8s.ClusterAction(
 			clusterID,
@@ -590,14 +628,7 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 
 		mlflowID := gk8s.Release(clusterID, &mlflowMultitenant,
 			mlflowDepsID,
-			oauth2ProxyImageID,
-			mlflowOIDCProxyImageID,
 			waitForIngressWebhookID,
-			mlflowImageID,
-			keycloakImageID,
-			kubectlImageID,
-			minioImageIDs,
-			redisImageID,
 			waitForPostgresDeletionID,
 		)
 
@@ -607,7 +638,6 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 
 		jupyterhubID := gk8s.Release(clusterID, &jupyterhub2,
 			mlflowID,
-			jupyterhubImageID,
 			waitForIngressWebhookID, postgresSecretsReadyID,
 		)
 
@@ -643,7 +673,7 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 		gk8s.Setup(ctx)
 	})
 
-	s.cases("mlflow-multitenant-robot-robot-1", "mlflow-multitenant-robot-robot-1")
+	s.cases("mlflow-multitenant-robot-robot-1", "mlflow-multitenant-robot-robot-3", "mlflow-multitenant-robot-robot-1")
 })
 
 var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
@@ -657,9 +687,9 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 		gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
 		gk8s.ClusterAction(clusterID, "Describe Pods on Failure", gingk8s.ClusterCleanupAction(DescribePods))
 
-		mlflowDepsID := gk8s.Release(clusterID, &mlflowMultitenantDeps, postgresImageIDs, certManagerImageIDs)
+		mlflowDepsID := gk8s.Release(clusterID, &mlflowMultitenantDeps)
 
-		ingressNginxID := gk8s.Release(clusterID, &ingressNginx2, nginxImageID) //	certsID,
+		ingressNginxID := gk8s.Release(clusterID, &ingressNginx2)
 
 		waitForIngressWebhookID := gk8s.ClusterAction(clusterID, "Wait for Ingress Webhook", gingk8s.ClusterAction(waitForIngressWebhook), ingressNginxID)
 
@@ -682,14 +712,7 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 
 		gk8s.Release(clusterID, &mlflowMultitenantDefaults,
 			mlflowDepsID,
-			oauth2ProxyImageID,
-			mlflowOIDCProxyImageID,
 			waitForIngressWebhookID,
-			mlflowImageID,
-			keycloakImageID,
-			kubectlImageID,
-			minioImageIDs,
-			redisImageID,
 			waitForPostgresDeletionID,
 		)
 

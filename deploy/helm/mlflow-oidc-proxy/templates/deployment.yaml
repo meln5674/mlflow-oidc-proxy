@@ -56,10 +56,18 @@ spec:
           - name: config
             mountPath: /etc/mlflow-oidc-proxy/mlflow-oidc-proxy.cfg
             subPath: {{ .Values.config.existingConfigMap.key }}
-          {{- range $robot := $robots }}
+          {{- range $ix, $robot := $robots }}
           - name: robot-{{ $robot.name }}
+            {{- $type := $robot.type | default "mtls" }}
+            {{- if eq $type "mtls" }}
             mountPath: {{ $robot.certPath }}
-            subPath: {{ $robot.secret.key }}
+            subPath: {{ $robot.secret.key | default "tls.crt" }}
+            {{- else if eq $type "token" }}
+            mountPath: {{ $robot.secretTokenPath }}
+            subPath: {{ $robot.secret.key | default "token" }}
+            {{- else }}
+            {{- printf "Robot %d (%s) has unrecognized type %s" $ix $robot.name $robot.type | fail }}
+            {{- end }}
           {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

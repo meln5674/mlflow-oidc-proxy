@@ -143,7 +143,11 @@ config:
       # - name: robot-name
       #   secret:
       #     name: my-secret
+      #     # Can be mtls (client cert) or token. Default is mtls
+      #     # type: mtls
       #     key: tls.crt
+      #     # -OR-
+      #     key: token
       #   token:
       #     claim: value
       # If present, this template will be instantiated and merged to the contents of robots

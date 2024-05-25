@@ -74,9 +74,17 @@ Create the name of the service account to use
 {{- define "mlflow-oidc-proxy.robots" -}}
 {{- $dot := . }}
 {{- $robotMap := dict }}
-{{- range $robot := .Values.config.yaml.robots.robots }}
+{{- range $ix, $robot := .Values.config.yaml.robots.robots }}
+    {{- $type := $robot.type | default "mtls" }}
+    {{- if eq $type "mtls" }}
     {{- $certPath := $robot.certPath | default (printf "/var/run/secrets/robots/%s/tls.crt" $robot.name) }}
     {{- $robotMap = set $robotMap $robot.name (set (deepCopy $robot) "certPath" $certPath) }}
+    {{- else if eq $type "token" }}
+    {{- $secretTokenPath := $robot.certPath | default (printf "/var/run/secrets/robots/%s/token" $robot.name) }}
+    {{- $robotMap = set $robotMap $robot.name (set (deepCopy $robot) "secretTokenPath" $secretTokenPath) }}
+    {{- else }}
+    {{- printf "Robot %d (%s) has unknown type %s" $ix $robot.name $type | fail }}
+    {{- end }}
 {{- end }}
 {{- if .Values.config.yaml.robots.robotsTemplate }}
     {{- $robotsTplOutput := tpl .Values.config.yaml.robots.robotsTemplate $dot | fromYaml }}
@@ -84,11 +92,17 @@ Create the name of the service account to use
         {{- fail . }}
     {{- end }}
     {{- $robotsTplOutput = $robotsTplOutput.robots }}
-    {{- range $robot := $robotsTplOutput }}
+    {{- range $ix, $robot := $robotsTplOutput }}
         {{- $existingRobot := get $robotMap $robot.name | default dict }}
         {{- $mergedRobot := mergeOverwrite $existingRobot $robot }}
+        {{- $type := $mergedRobot.type | default "mtls" }}
+        {{- if eq $type "mtls" }}
         {{- $certPath := $mergedRobot.certPath | default (printf "/var/run/secrets/robots/%s/tls.crt" $robot.name) }}
         {{- $mergedRobot = set $mergedRobot "certPath" $certPath }}
+        {{- else if eq $type "token" }}
+        {{- $secretTokenPath := $mergedRobot.secretTokenPath | default (printf "/var/run/secrets/robots/%s/token" $robot.name) }}
+        {{- $mergedRobot = set $mergedRobot "secretTokenPath" $secretTokenPath }}
+        {{- end }}
         {{- $robotMap = set $robotMap $mergedRobot.name $mergedRobot }}
     {{- end }}
 {{- end }}

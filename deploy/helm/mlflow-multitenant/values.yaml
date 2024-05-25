@@ -229,9 +229,11 @@ certManagerCerts:
     # Set to ClusterIssuer if using a cluster-scoped issuer
     kind: Issuer
 
-  # If true, create a certificate for each robot listed under
+  # If true, create a certificate for each robot with type "mtls" listed under
   # mlflow-oidc-proxy.config.{yaml,contents}.robots.robots
   createRobotCerts: true
+# If true, autogenerate a secret for each robot with type "token"
+createRobotTokens: true
 
 oauth2-proxy:
   enabled: true
@@ -327,7 +329,13 @@ mlflow-oidc-proxy:
           - name: {{ $robot.name }}
             secret:
               name: {{ $dot.Values.global.mlflowMultitenant.fullname }}-robot-{{ $robot.name }}
+              {{- $type := $robot.type | default "mtls" }}
+              type: {{ $type }}
+              {{- if eq $type "mtls" }}
               key: tls.crt
+              {{- else if eq $type "token" }}
+              key: token
+              {{- end }}
           {{- end }}
 
     # This string will be parsed as YAML and override values in the yaml field

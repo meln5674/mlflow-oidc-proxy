@@ -10,6 +10,8 @@ rm -f get-example-done*
 git clone https://github.com/alfozan/mlflow-example.git
 cp /mnt/host/mlflow-oidc-proxy/integration-test/MLflow-example-notebook.ipynb mlflow-example/
 
+sed -i 's/mlflow>=.*/mlflow==2.3.2/' mlflow-example/requirements.txt
+
 pip install --user -r mlflow-example/requirements.txt
 
 if [ -n "${MLFLOW_TRACKING_CLIENT_CERT_AND_KEY:-}" ]; then

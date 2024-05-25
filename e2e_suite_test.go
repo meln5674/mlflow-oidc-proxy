@@ -56,6 +56,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 
 	gk8s.Options(gingk8s.SuiteOpts{
 		// NoSuiteCleanup: true,
+		// NoSpecCleanup:  true,
 		Kubectl: localKubectl,
 		Helm: &gingk8s.HelmCommand{
 			Command: []string{"bin/helm"},
@@ -214,8 +215,7 @@ spec:
     name: selfsigned-issuer
     kind: Issuer
     group: cert-manager.io
-`,
-			`
+`, `
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -230,6 +230,13 @@ spec:
     name: selfsigned-issuer
     kind: Issuer
     group: cert-manager.io
+`, `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: robot-3
+stringData:
+  token: dummy-token
 `,
 		},
 
@@ -566,11 +573,18 @@ spec:
 			"config.yaml.robots.robots[0].token.preferred_username":    "robot-1",
 			"config.yaml.robots.robots[0].secret.name":                 "robot-1",
 			"config.yaml.robots.robots[0].secret.key":                  "tls.crt",
+
 			"config.yaml.robots.robots[1].name":                        "robot-2",
+			"config.yaml.robots.robots[1].type":                        "mtls",
 			"config.yaml.robots.robots[1].token.realm_access.roles[0]": "tenant-2",
 			"config.yaml.robots.robots[1].token.preferred_username":    "robot-2",
 			"config.yaml.robots.robots[1].secret.name":                 "robot-2",
-			"config.yaml.robots.robots[1].secret.key":                  "tls.crt",
+
+			"config.yaml.robots.robots[2].name":                        "robot-3",
+			"config.yaml.robots.robots[2].type":                        "token",
+			"config.yaml.robots.robots[2].token.realm_access.roles[0]": "tenant-1",
+			"config.yaml.robots.robots[2].token.preferred_username":    "robot-3",
+			"config.yaml.robots.robots[2].secret.name":                 "robot-3",
 		},
 		SetString: gingk8s.StringObject{
 			"ingress.className": "nginx",
@@ -735,12 +749,20 @@ spec:
 			"mlflow-oidc-proxy.config.yaml.robots.robots[0].name":                        "robot-1",
 			"mlflow-oidc-proxy.config.yaml.robots.robots[0].token.realm_access.roles[0]": "tenant-1",
 			"mlflow-oidc-proxy.config.yaml.robots.robots[0].token.preferred_username":    "robot-1",
+
 			"mlflow-oidc-proxy.config.yaml.robots.robots[1].name":                        "robot-2",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[1].type":                        "mtls",
 			"mlflow-oidc-proxy.config.yaml.robots.robots[1].token.realm_access.roles[0]": "tenant-2",
 			"mlflow-oidc-proxy.config.yaml.robots.robots[1].token.preferred_username":    "robot-2",
-			"mlflow-oidc-proxy.ingress.enabled":                                          true,
-			"mlflow-oidc-proxy.ingress.hostname":                                         "mlflow-api.mlflow-oidc-proxy-it.cluster",
-			"mlflow-oidc-proxy.replicaCount":                                             1,
+
+			"mlflow-oidc-proxy.config.yaml.robots.robots[2].name":                        "robot-3",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[2].type":                        "token",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[2].token.realm_access.roles[0]": "tenant-1",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[2].token.preferred_username":    "robot-3",
+
+			"mlflow-oidc-proxy.ingress.enabled":  true,
+			"mlflow-oidc-proxy.ingress.hostname": "mlflow-api.mlflow-oidc-proxy-it.cluster",
+			"mlflow-oidc-proxy.replicaCount":     1,
 
 			"keycloakJob.extraClients[0].id":          "jupyterhub",
 			"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
@@ -1065,8 +1087,8 @@ func keycloakSetup(pod string, extraEnv ...string) func(g gingk8s.Gingk8s, ctx c
 func minioSet() gingk8s.Object {
 	set := gingk8s.Object{
 		"resources.requests.memory":       "512Mi",
-		"replicas":                        "1",
-		"persistence.enabled":             false,
+		"replicas":                        1,
+		"persistence.enabled":             true,
 		"mode":                            "standalone",
 		"consoleIngress.enabled":          true,
 		"consoleIngress.hosts[0]":         "minio-console.mlflow-oidc-proxy-it.cluster",

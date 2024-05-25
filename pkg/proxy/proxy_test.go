@@ -41,10 +41,12 @@ type proxySpecState struct {
 	body            io.Reader
 	addJWT          bool
 	addRobotCert    bool
+	addRobotToken   bool
 	headers         map[string]string
 	claims          map[string]interface{}
 	robotCert       string
 	robotCertParsed *x509.Certificate
+	robotToken      string
 	tokenSubject    string
 
 	tls bool
@@ -204,9 +206,8 @@ func (p *proxySpecState) addNoAccessTests() {
 	p.testBothRobotTypes(func() {
 		When("the robot user is not granted access", func() {
 			BeforeEach(func() {
-				p.addRobotCert = true
-				p.robotCert = suiteCommonVars.RobotCertPEMs[1]
-				p.robotCertParsed = suiteCommonVars.RobotCerts[1]
+				p.addRobotToken = true
+				p.robotToken = "dummy-token"
 				p.tokenSubject = "robot-2"
 			})
 			It("should return 403", func() {
@@ -322,9 +323,8 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 					},
 					{
 						Name: "robot-2",
-						Cert: proxy.CertificateFromPath{
-							Raw:   "dummy-cert-2.pem",
-							Inner: suiteCommonVars.RobotCerts[1],
+						SecretToken: proxy.SecretTokenFromPath{
+							Token: "dummy-token",
 						},
 					},
 				},
@@ -398,6 +398,9 @@ var _ = Describe("The MLFLow OIDC Proxy", func() {
 			} else {
 				s.req.Header.Add(proxy.DefaultCertificateHeader, url.QueryEscape(s.robotCert))
 			}
+		}
+		if s.addRobotToken {
+			s.req.Header.Add("Authorization", "Bearer "+s.robotToken)
 		}
 
 		GinkgoWriter.Printf("Executing request\n")

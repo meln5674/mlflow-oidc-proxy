@@ -23,9 +23,18 @@ data:
   {{- $_ := set $config.mlflow "tenants" $tenants }}
 
   {{- $robots := list }}
-  {{- range $robot := $config.robots.robots }}
+  {{- range $ix, $robot := $config.robots.robots }}
+  {{- $type := $robot.type | default "mtls" }}
+  {{- $configRobot := deepCopy $robot }}
+  {{- if eq $type "mtls" }}
   {{- $certPath := printf "/var/run/secrets/robots/%s/tls.crt" $robot.name }}
-  {{- $configRobot := set (deepCopy $robot) "certPath" $certPath }}
+  {{- $configRobot = set $configRobot "certPath" $certPath }}
+  {{- else if eq $type "token" }}
+  {{- $secretTokenPath := printf "/var/run/secrets/robots/%s/token" $robot.name }}
+  {{- $configRobot = set $configRobot "secretTokenPath" $secretTokenPath }}
+  {{- else }}
+  {{- printf "Robot %d (%n) has unknown type %s" $ix $robot.name $type | fail }}
+  {{- end }}
   {{- $robots = append $robots $configRobot }}
   {{- end }}
   {{- $config = set $config "robots" (set $config.robots "robots" $robots) }}

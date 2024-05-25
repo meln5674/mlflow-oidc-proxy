@@ -26,7 +26,8 @@ func (t *TokenFromClaims) UnmarshalJSON(bytes []byte) error {
 }
 
 type Robot struct {
-	Name  string              `json:"name"`
-	Cert  CertificateFromPath `json:"certPath"`
-	Token TokenFromClaims     `json:"token"`
+	Name        string              `json:"name"`
+	Cert        CertificateFromPath `json:"certPath"`
+	SecretToken SecretTokenFromPath `json:"secretTokenPath"`
+	Token       TokenFromClaims     `json:"token"`
 }

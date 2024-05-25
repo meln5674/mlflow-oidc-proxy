@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/meln5674/gotoken"
 	proxy "github.com/meln5674/mlflow-oidc-proxy/pkg/proxy"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -80,6 +81,11 @@ var _ = Describe("Config", func() {
 								"name": "robot-2",
 								"certPath": "../../integration-test/test-cert-2.pem",
 								"token": { "claim-3": "value-3", "claim-4": "value-4" }
+							},
+							{
+								"name": "robot-3",
+								"secretTokenPath": "../../integration-test/test-token",
+								"token": { "claim-5": "value-5", "claim-6": "value-6" }
 							}
 						]
 					}
@@ -103,13 +109,13 @@ var _ = Describe("Config", func() {
 			Expect(config.TLS.CertFile).To(Equal("/foo/bar.crt"))
 			Expect(config.TLS.KeyFile).To(Equal("baz/qux.key"))
 			Expect(config.OIDC.TokenHeader).To(Equal("X-My-Custom-Header"))
-			Expect(config.OIDC.TokenMode).To(Equal(proxy.TokenModeBearer))
+			Expect(config.OIDC.TokenMode).To(Equal(gotoken.TokenModeBearer))
 			Expect(config.OIDC.Policy.Raw).To(Equal("{{ eq 1 2 }}"))
 			Expect(config.OIDC.ExtraVariables).To(HaveKeyWithValue("foo", HaveExactElements("bar")))
 			Expect(config.OIDC.ExtraVariables).To(HaveKeyWithValue("baz", BeNumerically("==", 1)))
 			Expect(config.OIDC.ExtraVariables).To(HaveKeyWithValue("qux", BeNumerically("==", 3.5)))
 			Expect(config.Robots.CertificateHeader).To(Equal("X-Another-Custom-Header"))
-			Expect(config.Robots.Robots).To(HaveLen(2))
+			Expect(config.Robots.Robots).To(HaveLen(3))
 			Expect(config.Robots.Robots[0].Name).To(Equal("robot-1"))
 			// TODO: Verify certificate matches
 			Expect(config.Robots.Robots[0].Cert.Inner).ToNot(BeNil())
@@ -120,6 +126,12 @@ var _ = Describe("Config", func() {
 			Expect(config.Robots.Robots[1].Cert.Inner).ToNot(BeNil())
 			Expect(config.Robots.Robots[1].Token.Inner.Claims).To(HaveKeyWithValue("claim-3", "value-3"))
 			Expect(config.Robots.Robots[1].Token.Inner.Claims).To(HaveKeyWithValue("claim-4", "value-4"))
+
+			Expect(config.Robots.Robots[2].Name).To(Equal("robot-3"))
+			Expect(config.Robots.Robots[2].Cert.Inner).To(BeNil())
+			Expect(config.Robots.Robots[2].SecretToken.Token).To(Equal("xTVy9gJp82b7VkO7iTOMsZb4eN6NoY4K"))
+			Expect(config.Robots.Robots[2].Token.Inner.Claims).To(HaveKeyWithValue("claim-5", "value-5"))
+			Expect(config.Robots.Robots[2].Token.Inner.Claims).To(HaveKeyWithValue("claim-6", "value-6"))
 		})
 	})
 

@@ -1,0 +1,27 @@
+{{- define "mlflow-multitenant.robot-token-secrets" -}}
+{{- $dot := . }}
+{{- $mlflowOIDCProxy := index .Values "mlflow-oidc-proxy" }}
+{{- $config := deepCopy $mlflowOIDCProxy.config.yaml }}
+{{- $fromContents := fromYaml $mlflowOIDCProxy.config.contents }}
+{{- with $fromContents.Error }}
+{{- fail . }}
+{{- end }}
+{{- $config = mergeOverwrite $config $fromContents }}
+{{- range $robot := $config.robots.robots }}
+{{- $type := $robot.type | default "mtls" }}
+{{ if eq $type "token" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" $dot }}-robot-{{ $robot.name }}
+stringData:
+  token: {{ randAlphaNum 32 }}
+---
+{{- end }}
+{{- end }}
+{{- end -}}
+
+
+{{- if .Values.createRobotTokens }}
+{{ include "mlflow-multitenant.robot-token-secrets" . }}
+{{- end }}
