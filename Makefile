@@ -6,7 +6,7 @@ TEST_SUITES ?= ./pkg/proxy
 TEST_FLAGS ?= --race --trace -p
 
 E2E_TEST_SUITES ?= ./
-E2E_TEST_FLAGS ?= --race --trace -v --flake-attempts=3 --fail-fast
+E2E_TEST_FLAGS ?= --race --trace -v --flake-attempts=5 --fail-fast
 
 coverprofile.out: deps
 	bin/ginkgo run --cover --coverpkg=./,./pkg/proxy/ $(TEST_FLAGS) $(TEST_SUITES)

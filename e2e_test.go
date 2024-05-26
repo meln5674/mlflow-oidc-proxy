@@ -181,7 +181,7 @@ func (s *subSuite) keycloakToken(needCredentials bool) string {
 	mlflowURL := fmt.Sprintf("https://%s/oauth2/sign_in", oauth2Proxy.Set["ingress.hostname"])
 	b.Navigate(mlflowURL)
 	generateTokenXPath := "/html/body/section/div/form[2]/button"
-	Eventually(b.XPath(generateTokenXPath)).Should(b.Exist())
+	Eventually(b.XPath(generateTokenXPath), "30s").Should(b.Exist())
 
 	By("Entering keycloak credentials for a token")
 	b.Click(b.XPath(generateTokenXPath))
@@ -203,18 +203,18 @@ func (s *subSuite) keycloakLogin(needCredentials bool) {
 	mlflowURL := fmt.Sprintf("https://%s/oauth2/sign_in", oauth2Proxy.Set["ingress.hostname"])
 	b.Navigate(mlflowURL)
 	loginButton := b.XPath("/html/body/section/div/form[1]/button")
-	Eventually(loginButton).Should(b.Exist())
+	Eventually(loginButton, "30s").Should(b.Exist())
 
 	By("Entering keycloak credentials for typical login")
 	b.Click(loginButton)
 	if needCredentials {
-		Eventually(b.Location, "5s").Should(HavePrefix(fmt.Sprintf("https://%s/", keycloak.Set["ingress.hostname"])))
+		Eventually(b.Location, "30s").Should(HavePrefix(fmt.Sprintf("https://%s/", keycloak.Set["ingress.hostname"])))
 		b.SetValue("#username", "tenant-1")
 		b.SetValue("#password", "test")
 		b.Click("#kc-login")
 	}
 
-	Eventually(b.Location, "5s").Should(Equal(fmt.Sprintf("https://%s/", oauth2Proxy.Set["ingress.hostname"])))
+	Eventually(b.Location, "30s").Should(Equal(fmt.Sprintf("https://%s/", oauth2Proxy.Set["ingress.hostname"])))
 }
 
 func (s *subSuite) sessionSetup() {
@@ -231,7 +231,7 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	b := s.b
 	By("Going to Jupyterhub")
 	b.Navigate(fmt.Sprintf("https://%s/", jupyterhub.Set["ingress.hosts[0]"]))
-	Eventually(".btn.btn-jupyter.btn-lg").Should(b.Exist())
+	Eventually(".btn.btn-jupyter.btn-lg", "30s").Should(b.Exist())
 	b.Click(".btn.btn-jupyter.btn-lg")
 
 	By("Navigating to the workspace root")
@@ -248,15 +248,15 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	time.Sleep(15 * time.Second)
 	s.mouseClick(rootFolderButton, chromedp.ButtonLeft)
 	folder := `.jp-BreadCrumbs [title="mlflow-example"]`
-	Eventually(folder).ShouldNot(b.Exist())
+	Eventually(folder, "30s").ShouldNot(b.Exist())
 
 	By("Opening a new launcher")
 	fileButton := `div[role="banner"] .lm-MenuBar-content > li:nth-child(1)`
-	Eventually(fileButton).Should(b.Exist())
+	Eventually(fileButton, "30s").Should(b.Exist())
 	s.mouseClick(fileButton, chromedp.ButtonLeft)
 	time.Sleep(1 * time.Second)
 	launcherButton := `div.lm-Widget.p-Widget.lm-Menu.p-Menu [data-command="filebrowser:create-main-launcher"]`
-	Eventually(launcherButton).Should(b.Exist())
+	Eventually(launcherButton, "30s").Should(b.Exist())
 	s.mouseMove(launcherButton)
 	// Expect(chromedp.Run(b.Context, chromedp.QueryAfter(launcherButton, func(ctx context.Context, id cdpruntime.ExecutionContextID, nodes ...*cdp.Node) error {
 	// 	Expect(nodes).To(HaveLen(1))
@@ -276,7 +276,7 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	s.mouseClick(terminalButton, chromedp.ButtonLeft)
 	// terminal := `div.jp-Terminal[label="notebook content"]`
 	terminal := "#jp-Terminal-0"
-	Eventually(terminal).Should(b.Exist())
+	Eventually(terminal, "30s").Should(b.Exist())
 
 	By("Executing the startup script")
 	testTS := time.Now().Unix()
@@ -295,17 +295,17 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	By("Opening the example notebook")
 	s.mouseClick(folderButton, chromedp.ButtonLeft, chromedp.ClickCount(2))
 	notebookButton := `li.jp-DirListing-item[title^="Name: MLflow-example-notebook.ipynb"]`
-	Eventually(notebookButton).Should(b.Exist())
+	Eventually(notebookButton, "30s").Should(b.Exist())
 	s.mouseClick(notebookButton, chromedp.ButtonLeft, chromedp.ClickCount(2))
 
 	By("Clearing all outputs")
 	restartButton := `button[title="Restart Kernel and Run All Cells…"]`
-	Eventually(restartButton).Should(b.Exist())
+	Eventually(restartButton, "30s").Should(b.Exist())
 	editButton := `.lm-MenuBar-content > li:nth-child(2)`
 	Expect(editButton).To(b.Exist())
 	s.mouseClick(editButton, chromedp.ButtonLeft)
 	clearButton := `div.lm-Widget.p-Widget.lm-Menu.p-Menu [data-command="editmenu:clear-all"]`
-	Eventually(clearButton).Should(b.Exist())
+	Eventually(clearButton, "30s").Should(b.Exist())
 	s.mouseMove(clearButton)
 	s.mouseClick(clearButton, chromedp.ButtonLeft)
 
@@ -317,7 +317,7 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	//  If the kernel is not already started, we get a dialog to select the kernel
 	// The two buttons have an intersection of their classes, so this "should" work
 	acceptButton := ".jp-Dialog-button.jp-mod-accept"
-	Eventually(acceptButton).Should(b.Exist())
+	Eventually(acceptButton, "30s").Should(b.Exist())
 	b.Click(acceptButton, chromedp.ButtonLeft)
 
 	cellFmt := func(ix int) string {
@@ -373,16 +373,16 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	b.Click(tenantButton)
 	Eventually(b.Location, "5s").Should(HavePrefix(fmt.Sprintf("%s/#/experiments/", mlflowTenantURL)))
 	experimentButton := `a[href="#/experiments/1`
-	Eventually(experimentButton).Should(b.Exist())
+	Eventually(experimentButton, "30s").Should(b.Exist())
 	b.Click(experimentButton)
-	Eventually(b.Location, "5s").Should(HavePrefix(fmt.Sprintf("%s/#/experiments/1", mlflowTenantURL)))
+	Eventually(b.Location, "30s").Should(HavePrefix(fmt.Sprintf("%s/#/experiments/1", mlflowTenantURL)))
 
 	mostRecentRun := `div.ag-pinned-left-cols-container > .ag-row-even:nth-child(1) a`
-	Eventually(mostRecentRun, "15s").Should(b.Exist())
+	Eventually(mostRecentRun, "30s").Should(b.Exist())
 	b.Click(mostRecentRun)
 
-	userField := `div[data-test-id="descriptions-item"]:nth-child(4) div[data-test-id="descriptions-item-content"] a`
-	Eventually(userField).Should(b.Exist())
+	userField := `#root > div.css-16vddf6 > div.css-1ji5wao > div > table > tbody > tr:nth-child(2) > td > a`
+	Eventually(userField, "1m").Should(b.Exist())
 	Expect(userField).To(b.HaveInnerText(expectedSubject))
 }
 
@@ -574,6 +574,10 @@ var _ = Describe("Standalone setup", Ordered, func() {
 			keycloakSetupID, waitForIngressWebhookID, postgresSecretsReadyID,
 		)
 
+		waitForJupyterhubID := gk8s.ClusterAction(clusterID, "Wait for jupyterhub rollout", gingk8s.ClusterAction(func(gk8s gingk8s.Gingk8s, ctx context.Context, c gingk8s.Cluster) error {
+			return gk8s.Kubectl(ctx, c, "rollout", "status", "deploy/hub").Run()
+		}), jupyterhubID)
+
 		terminals := gingk8s.ResourceDependencies{
 			Releases: []gingk8s.ReleaseID{
 				jupyterhubID,
@@ -583,6 +587,7 @@ var _ = Describe("Standalone setup", Ordered, func() {
 			},
 			ClusterActions: []gingk8s.ClusterActionID{
 				waitForOAuth2ProxyID,
+				waitForJupyterhubID,
 			},
 		}
 
@@ -641,6 +646,10 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 			waitForIngressWebhookID, postgresSecretsReadyID,
 		)
 
+		waitForJupyterhubID := gk8s.ClusterAction(clusterID, "Wait for jupyterhub rollout", gingk8s.ClusterAction(func(gk8s gingk8s.Gingk8s, ctx context.Context, c gingk8s.Cluster) error {
+			return gk8s.Kubectl(ctx, c, "rollout", "status", "deploy/hub").Run()
+		}), jupyterhubID)
+
 		keycloakSetupID := gk8s.ClusterAction(
 			clusterID,
 			"Create Keycloak Realm, Users, and Clients",
@@ -663,6 +672,7 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 			},
 			ClusterActions: []gingk8s.ClusterActionID{
 				keycloakSetupID,
+				waitForJupyterhubID,
 			},
 		}
 

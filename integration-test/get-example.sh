@@ -1,5 +1,7 @@
 #!/bin/bash -xeu
 
+MLFLOW_VERSION=2.13.0
+
 if [ -z "${MLFLOW_TRACKING_TOKEN:-}" ] && [ -z "${MLFLOW_TRACKING_CLIENT_CERT_AND_KEY:-}" ]; then
     echo 'MLFLOW_TRACKING_TOKEN and MLFLOW_TRACKING_CLIENT_CERT_AND_KEY not set, navigate to https://mlflow.mlflow-oidc-proxy-it.cluster/oauth2/sign_in to generate your token'
     exit 1
@@ -10,7 +12,7 @@ rm -f get-example-done*
 git clone https://github.com/alfozan/mlflow-example.git
 cp /mnt/host/mlflow-oidc-proxy/integration-test/MLflow-example-notebook.ipynb mlflow-example/
 
-sed -i 's/mlflow>=.*/mlflow==2.3.2/' mlflow-example/requirements.txt
+sed -i 's/mlflow>=.*/mlflow=='"${MLFLOW_VERSION}"'/' mlflow-example/requirements.txt
 
 pip install --user -r mlflow-example/requirements.txt
 

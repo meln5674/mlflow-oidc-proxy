@@ -921,7 +921,7 @@ spec:
 	kubectlImage          = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/kubectl:1.25.3"}
 	keycloakImage         = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/keycloak:21.0.2-debian-11-r0"}
 	redisImage            = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/redis:7.0.10-debian-11-r4"}
-	mlflowImage           = &gingk8s.ThirdPartyImage{Name: "ghcr.io/mlflow/mlflow:v2.3.2"}
+	mlflowImage           = &gingk8s.ThirdPartyImage{Name: "ghcr.io/mlflow/mlflow:v2.13.0"}
 	kubeIngressProxyImage = &gingk8s.ThirdPartyImage{Name: "ghcr.io/meln5674/kube-ingress-proxy:v0.3.0-rc1"}
 	postgresImages        = []*gingk8s.ThirdPartyImage{
 		&gingk8s.ThirdPartyImage{Name: "ghcr.io/zalando/spilo-15:3.0-p1"},
@@ -1078,9 +1078,12 @@ func keycloakSetup(pod string, extraEnv ...string) func(g gingk8s.Gingk8s, ctx c
 	copy(fullScriptParts, extraEnv)
 	fullScriptParts = append(fullScriptParts, string(keycloakSetupScript))
 	return func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
-		return g.KubectlExec(ctx, cluster, pod, "bash", []string{"-xe"}).
-			WithStreams(gosh.StringIn(strings.Join(fullScriptParts, "\n"))).
-			Run()
+		return gosh.Then(
+			// If this isn't delted, it will conflict between setups
+			g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-oidc-proxy"),
+			g.KubectlExec(ctx, cluster, pod, "bash", []string{"-xe"}).
+				WithStreams(gosh.StringIn(strings.Join(fullScriptParts, "\n"))),
+		).Run()
 	}
 }
 
