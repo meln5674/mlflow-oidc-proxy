@@ -719,6 +719,7 @@ spec:
 			`keycloak.ingress.annotations.nginx\.ingress\.kubernetes\.io/proxy-buffer-size`: "1m",
 			"keycloak.tls.keystorePassword":            "keystore-password",
 			"keycloak.tls.truststorePassword":          "truststore-password",
+			"keycloak.proxy":                           "edge",
 			"keycloak.service.type":                    "ClusterIP",
 			"keycloak.auth.adminUser":                  "admin",
 			"keycloak.auth.adminPassword":              "adminPassword",
@@ -1079,10 +1080,6 @@ func keycloakSetup(pod string, extraEnv ...string) func(g gingk8s.Gingk8s, ctx c
 	fullScriptParts = append(fullScriptParts, string(keycloakSetupScript))
 	return func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
 		return gosh.Then(
-			// If this isn't delted, it will conflict between setups
-			g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-oidc-proxy"),
-			g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-oidc"),
-			g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-jupyterhub-oidc"),
 			g.KubectlExec(ctx, cluster, pod, "bash", []string{"-xe"}).
 				WithStreams(gosh.StringIn(strings.Join(fullScriptParts, "\n"))),
 		).Run()

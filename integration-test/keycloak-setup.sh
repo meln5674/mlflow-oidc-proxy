@@ -118,6 +118,8 @@ for tenant in 1 2; do
             kcadm.sh create users \
                 -r "${REALM}" \
                 -s username="tenant-${tenant}" \
+                -s firstName=Dummy \
+                -s lastName=Dummy \
                 -s email="tenant-${tenant}@test.test" \
                 -s emailVerified=true \
                 -s credentials='[{"type": "password", "value": "test", "temporary": false}]' \
