@@ -8,9 +8,7 @@ name: CI
 on:
   workflow_dispatch: {}
   push:
-    # Tags should be built by CD instead
-    tags-ignore: ['*']
-    branches: ['*']
+    branches: ['**']
   pull_request: {}
 
 env:
