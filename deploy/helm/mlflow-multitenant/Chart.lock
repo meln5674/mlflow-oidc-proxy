@@ -1,0 +1,15 @@
+dependencies:
+- name: mlflow-oidc-proxy
+  repository: file://../mlflow-oidc-proxy
+  version: 0.1.1
+- name: keycloak
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 14.2.0
+- name: oauth2-proxy
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 5.3.0
+- name: minio
+  repository: https://charts.min.io/
+  version: 5.0.8
+digest: sha256:441b541cd44654695af1b0ba040fa5b79d97f87d4f18a46d5ae836b334220249
+generated: "2024-05-27T14:28:02.46199632-06:00"

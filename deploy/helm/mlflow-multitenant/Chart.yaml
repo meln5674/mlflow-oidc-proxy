@@ -2,7 +2,7 @@ apiVersion: v2
 name: mlflow-multitenant
 description: Multitenant MLFlow using oauth2-proxy, mlflow-oicd-proxy, the zalando postgres-operator, and minio
 type: application
-version: 0.1.1
+version: 0.2.0
 appVersion: "v2.13.0"
 dependencies:
 - name: mlflow-oidc-proxy
@@ -14,7 +14,7 @@ dependencies:
   condition: keycloak.enabled
 - name: oauth2-proxy
   repository: oci://registry-1.docker.io/bitnamicharts
-  version: 3.5.0
+  version: 5.3.0
   condition: oauth2-proxy.enabled
 - name: minio
   repository: https://charts.min.io/

@@ -5,8 +5,8 @@ description: >-
   These charts provide the required operators for the mlflow-multitenant chart, and are
   collected here for conveninence.
 type: application
-version: 0.1.1
-appVersion: 0.1.1
+version: 0.2.0
+appVersion: 0.2.0
 dependencies:
 - name: cert-manager
   repository: https://charts.jetstack.io
