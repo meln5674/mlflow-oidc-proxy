@@ -1081,6 +1081,8 @@ func keycloakSetup(pod string, extraEnv ...string) func(g gingk8s.Gingk8s, ctx c
 		return gosh.Then(
 			// If this isn't delted, it will conflict between setups
 			g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-oidc-proxy"),
+			g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-oidc"),
+			g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-jupyterhub-oidc"),
 			g.KubectlExec(ctx, cluster, pod, "bash", []string{"-xe"}).
 				WithStreams(gosh.StringIn(strings.Join(fullScriptParts, "\n"))),
 		).Run()
@@ -1153,4 +1155,10 @@ func mlflowSet(tenant int) gingk8s.Object {
 
 func DescribePods(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
 	return g.Kubectl(ctx, cluster, "describe", "pods").Run()
+}
+
+func clearJupyterhubKeycloakSecrets(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
+	return gosh.Then(
+		g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-jupyterhub-oidc"),
+	).Run()
 }

@@ -381,7 +381,7 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 	Eventually(mostRecentRun, "30s").Should(b.Exist())
 	b.Click(mostRecentRun)
 
-	userField := `#root > div.css-16vddf6 > div.css-1ji5wao > div > table > tbody > tr:nth-child(2) > td > a`
+	userField := `#root > div > div > div > table > tbody > tr:nth-child(2) > td > a`
 	Eventually(userField, "1m").Should(b.Exist())
 	Expect(userField).To(b.HaveInnerText(expectedSubject))
 }
@@ -565,34 +565,34 @@ var _ = Describe("Standalone setup", Ordered, func() {
 			keycloakSetupID, waitForIngressWebhookID,
 		)
 
-		waitForOAuth2ProxyID := gk8s.ClusterAction(clusterID, "Wait for oauth2 proxy rollout", gingk8s.ClusterAction(func(gk8s gingk8s.Gingk8s, ctx context.Context, c gingk8s.Cluster) error {
-			return gk8s.Kubectl(ctx, c, "rollout", "status", "deploy/oauth2-proxy").Run()
-		}), oauth2ProxyID)
-
 		jupyterhubID := gk8s.Release(clusterID, &jupyterhub,
 			keycloakID,
 			keycloakSetupID, waitForIngressWebhookID, postgresSecretsReadyID,
 		)
 
-		waitForJupyterhubID := gk8s.ClusterAction(clusterID, "Wait for jupyterhub rollout", gingk8s.ClusterAction(func(gk8s gingk8s.Gingk8s, ctx context.Context, c gingk8s.Cluster) error {
-			return gk8s.Kubectl(ctx, c, "rollout", "status", "deploy/hub").Run()
-		}), jupyterhubID)
-
-		terminals := gingk8s.ResourceDependencies{
-			Releases: []gingk8s.ReleaseID{
-				jupyterhubID,
-				mlflowOIDCProxyID,
-				mlflowIDs[0],
-				mlflowIDs[1],
-			},
-			ClusterActions: []gingk8s.ClusterActionID{
-				waitForOAuth2ProxyID,
-				waitForJupyterhubID,
-			},
+		/*terminals := */
+		_ = gingk8s.ResourceDependencies{
+			Releases: append(
+				[]gingk8s.ReleaseID{
+					jupyterhubID,
+					mlflowOIDCProxyID,
+					oauth2ProxyID,
+				},
+				mlflowIDs...,
+			),
 		}
 
-		gk8s.ClusterAction(clusterID, "Describe Pods on Failure", gingk8s.ClusterCleanupAction(DescribePods), &terminals)
-
+		// gk8s.ClusterAction(clusterID, "Describe Pods on Failure", gingk8s.ClusterCleanupAction(DescribePods), &terminals)
+		gk8s.ClusterAction(clusterID, "Ingress Logs", &gingk8s.KubectlLogger{
+			Kind:        "ds",
+			Name:        "ingress-nginx-controller",
+			RetryPeriod: 15 * time.Second,
+		}, ingressNginxID)
+		gk8s.ClusterAction(clusterID, "Oauth2 Proxy Logs", &gingk8s.KubectlLogger{
+			Kind:        "deploy",
+			Name:        "oauth2-proxy",
+			RetryPeriod: 15 * time.Second,
+		}, oauth2ProxyID)
 		gk8s.ClusterAction(clusterID, "MLFLow Tenant 1 Logs", &gingk8s.KubectlLogger{
 			Kind:        "deploy",
 			Name:        "mlflow-tenant-1",
@@ -637,6 +637,21 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 			waitForPostgresDeletionID,
 		)
 
+		gk8s.ClusterAction(clusterID, "Clean up keycloak secret on finish", gingk8s.ClusterCleanupAction(func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
+			return g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-oidc", "--ignore-not-found").Run()
+		}), mlflowID)
+
+		gk8s.ClusterAction(clusterID, "Ingress Logs", &gingk8s.KubectlLogger{
+			Kind:        "ds",
+			Name:        "ingress-nginx-controller",
+			RetryPeriod: 15 * time.Second,
+		}, ingressNginxID)
+		gk8s.ClusterAction(clusterID, "Oauth2 Proxy Logs", &gingk8s.KubectlLogger{
+			Kind:        "deploy",
+			Name:        "mlflow-multitenant-oauth2-proxy",
+			RetryPeriod: 15 * time.Second,
+		}, mlflowID)
+
 		certsID := gk8s.Manifests(clusterID, &certsNoIssuer, mlflowDepsID, mlflowID)
 
 		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, mlflowID)
@@ -645,10 +660,6 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 			mlflowID,
 			waitForIngressWebhookID, postgresSecretsReadyID,
 		)
-
-		waitForJupyterhubID := gk8s.ClusterAction(clusterID, "Wait for jupyterhub rollout", gingk8s.ClusterAction(func(gk8s gingk8s.Gingk8s, ctx context.Context, c gingk8s.Cluster) error {
-			return gk8s.Kubectl(ctx, c, "rollout", "status", "deploy/hub").Run()
-		}), jupyterhubID)
 
 		keycloakSetupID := gk8s.ClusterAction(
 			clusterID,
@@ -662,7 +673,8 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 			mlflowID,
 		)
 
-		terminals := gingk8s.ResourceDependencies{
+		/*terminals := */
+		_ = gingk8s.ResourceDependencies{
 			Releases: []gingk8s.ReleaseID{
 				jupyterhubID,
 				mlflowID,
@@ -672,11 +684,10 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 			},
 			ClusterActions: []gingk8s.ClusterActionID{
 				keycloakSetupID,
-				waitForJupyterhubID,
 			},
 		}
 
-		gk8s.ClusterAction(clusterID, "Describe Pods on Failure", gingk8s.ClusterCleanupAction(DescribePods), &terminals)
+		// gk8s.ClusterAction(clusterID, "Describe Pods on Failure", gingk8s.ClusterCleanupAction(DescribePods), &terminals)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		DeferCleanup(cancel)
@@ -695,7 +706,7 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 
 		gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
 		gk8s.ClusterAction(clusterID, "Watch Events", watchEvents)
-		gk8s.ClusterAction(clusterID, "Describe Pods on Failure", gingk8s.ClusterCleanupAction(DescribePods))
+		// gk8s.ClusterAction(clusterID, "Describe Pods on Failure", gingk8s.ClusterCleanupAction(DescribePods))
 
 		mlflowDepsID := gk8s.Release(clusterID, &mlflowMultitenantDeps)
 
@@ -704,7 +715,6 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 		waitForIngressWebhookID := gk8s.ClusterAction(clusterID, "Wait for Ingress Webhook", gingk8s.ClusterAction(waitForIngressWebhook), ingressNginxID)
 
 		// gk8s.ClusterAction(clusterID, "Keycloak 0 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-0", RetryPeriod: 15 * time.Second})
-		// gk8s.ClusterAction(clusterID, "Keycloak 1 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-1", RetryPeriod: 15 * time.Second})
 		gk8s.ClusterAction(clusterID, "Keycloak Configuration Job Logs", &gingk8s.KubectlLogger{
 			Kind:        "job",
 			Name:        "mlflow-multitenant-configure-keycloak-1",
@@ -720,11 +730,15 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 
 		waitForPostgresDeletionID := gk8s.ClusterAction(clusterID, "Wait for postgres to be cleaned up before deleting operator", waitForPostgresDeletion, mlflowDepsID)
 
-		gk8s.Release(clusterID, &mlflowMultitenantDefaults,
+		mlflowID := gk8s.Release(clusterID, &mlflowMultitenantDefaults,
 			mlflowDepsID,
 			waitForIngressWebhookID,
 			waitForPostgresDeletionID,
 		)
+
+		gk8s.ClusterAction(clusterID, "Clean up keycloak secret on finish", gingk8s.ClusterCleanupAction(func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
+			return g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-oidc", "--ignore-not-found").Run()
+		}), mlflowID)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		DeferCleanup(cancel)
