@@ -269,7 +269,8 @@ oauth2-proxy:
       {{- if eq .name "provider-ca" }}
       provider_ca_files=["{{ .mountPath }}"]
       {{- end }}
-      {{- end }}redirect_url="{{ include "mlflow-multitenant.externalURL" . }}/oauth2/callback"
+      {{- end }}
+      redirect_url="{{ include "mlflow-multitenant.externalURL" . }}/oauth2/callback"
     # This will be templated and appended to content in the above configmap.
     # These fields are specific to your particular deployment case, so change them based on
     #   how your OIDC provider is configured if you're not using Keycloak.
