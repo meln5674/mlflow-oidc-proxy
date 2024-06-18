@@ -32,7 +32,9 @@ mlflow:
   # Object store configuration for the artifact store
   # Default to using the minio tenant deployed by the minio-operator,
   # With a separate bucket for each tenant
+  # Mutually exclusive with pvcStore
   objectStore:
+    enabled: true
     uriTemplate: 's3://{{ tpl .Values.minioJob.bucketTemplate . }}'
     credentials:
       accessKeyTemplate:
@@ -41,6 +43,16 @@ mlflow:
         nameTemplate: '{{ tpl .Values.minioJob.secretNameTemplate . }}'
         accessKeyKey: AWS_ACCESS_KEY_ID
         secretKeyKey: AWS_SECRET_ACCESS_KEY
+  # PVC configuration for the artifact store
+  # Mutually exclusive with objectStore
+  pvcStore:
+    enabled: false
+    size: 8Gi
+    # storageClassName:
+    accessModes:
+    - ReadWriteMany
+    # The name of the directory within the PVC to mount for a given tenant
+    subpathTemplate: '{{ .Tenant.id }}'
   # Common values for all tenants
   values:
     replicaCount: 2

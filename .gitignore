@@ -8,3 +8,4 @@ integration-test/images
 integration-test/kubeconfig
 coverprofile.out
 bin
+deploy/helm/**/charts/*.tgz

@@ -55,9 +55,9 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	}
 
 	gk8s.Options(gingk8s.SuiteOpts{
-		// NoSuiteCleanup: true,
-		// NoSpecCleanup:  true,
-		Kubectl: localKubectl,
+		NoSuiteCleanup: true,
+		NoSpecCleanup:  true,
+		Kubectl:        localKubectl,
 		Helm: &gingk8s.HelmCommand{
 			Command: []string{"bin/helm"},
 		},
@@ -110,6 +110,8 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		minioImageIDs,
 	)
 
+	gk8s.Release(clusterID, &sharedLocalPathProvisioner)
+
 	gk8s.Release(clusterID, &kubeIngressProxy) // , ingressNginxID)
 
 	gk8s.ClusterAction(clusterID, "Watch Pods", watchPods)
@@ -135,6 +137,28 @@ var (
 	watchEvents = &gingk8s.KubectlWatcher{
 		Kind:  "events",
 		Flags: []string{"--all-namespaces"},
+	}
+
+	sharedLocalPathProvisioner = gingk8s.HelmRelease{
+		Chart: &gingk8s.HelmChart{
+			RemoteChartInfo: gingk8s.RemoteChartInfo{
+				Repo: &gingk8s.HelmRepo{
+					Name: "local-path-provisioner",
+					URL:  "https://charts.containeroo.ch",
+				},
+				Name:    "local-path-provisioner",
+				Version: "0.0.26",
+			},
+		},
+		Name:      "shared-local-path-provisioner",
+		Namespace: "local-path-storage",
+		Set: gingk8s.Object{
+			"nodePathMap":          "",
+			"sharedFileSystemPath": "/var/lib/shared-local-path-provisioner",
+			"storageClass.name":    "shared-local-path",
+			"configmap.name":       "shared-local-path-config",
+			"fullnameOverride":     "shared-local-path-provisioner",
+		},
 	}
 
 	certManager = gingk8s.HelmRelease{
@@ -368,7 +392,7 @@ spec:
 					Name: "zalando",
 					URL:  "https://opensource.zalando.com/postgres-operator/charts/postgres-operator",
 				},
-				Version: "1.10.0",
+				Version: "1.10.1",
 			},
 		},
 		Wait: []gingk8s.WaitFor{
@@ -691,12 +715,12 @@ spec:
 		},
 	}
 
-	mlflowMultitenant = gingk8s.HelmRelease{
+	mlflowMultitenantObjectStore = gingk8s.HelmRelease{
 		Name: "mlflow-multitenant",
 		Chart: &gingk8s.HelmChart{
 			LocalChartInfo: gingk8s.LocalChartInfo{
-				Path:             "deploy/helm/mlflow-multitenant",
-				DependencyUpdate: true,
+				Path: "deploy/helm/mlflow-multitenant",
+				// DependencyUpdate: true,
 			},
 		},
 		ValuesFiles:  []string{"deploy/helm/mlflow-multitenant/values.yaml"},
@@ -785,12 +809,108 @@ spec:
 		},
 	}
 
+	mlflowMultitenantPVCStore = gingk8s.HelmRelease{
+		Name: "mlflow-multitenant",
+		Chart: &gingk8s.HelmChart{
+			LocalChartInfo: gingk8s.LocalChartInfo{
+				Path: "deploy/helm/mlflow-multitenant",
+				// DependencyUpdate: true,
+			},
+		},
+		ValuesFiles:  []string{"deploy/helm/mlflow-multitenant/values.yaml"},
+		UpgradeFlags: []string{"--wait-for-jobs", "--timeout=30m"},
+		SetFile: gingk8s.StringObject{
+			"oauth2-proxy.configuration.extraContent": "integration-test/cases/refresh_access/oauth2_proxy.cfg",
+			"mlflow-oidc-proxy.config.content":        "integration-test/cases/refresh_access/mlflow-oidc-proxy.cfg",
+		},
+		SetString: gingk8s.StringObject{
+			"mlflow-oidc-proxy.ingress.className": "nginx",
+			`mlflow-oidc-proxy.ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-pass-certificate-to-upstream`: "true",
+			`mlflow-oidc-proxy.ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-verify-client`:                "optional_no_ca",
+			`mlflow-oidc-proxy.ingress.annotations.nginx\.ingress\.kubernetes\.io/auth-tls-secret`:                       `default/mlflow-multitenant-ca`,
+		},
+		Set: gingk8s.Object{
+			"keycloak.ingress.enabled":              true,
+			"keycloak.ingress.ingressClassName":     "nginx",
+			"keycloak.ingress.hostname":             "keycloak.mlflow-oidc-proxy-it.cluster",
+			"keycloak.ingress.extraTls[0].hosts[0]": "keycloak.mlflow-oidc-proxy-it.cluster",
+			`keycloak.ingress.annotations.nginx\.ingress\.kubernetes\.io/proxy-buffer-size`: "1m",
+			"keycloak.tls.keystorePassword":            "keystore-password",
+			"keycloak.tls.truststorePassword":          "truststore-password",
+			"keycloak.proxy":                           "edge",
+			"keycloak.service.type":                    "ClusterIP",
+			"keycloak.auth.adminUser":                  "admin",
+			"keycloak.auth.adminPassword":              "adminPassword",
+			"keycloak.extraVolumes[0].name":            "home",
+			"keycloak.extraVolumes[0].emptyDir.medium": "Memory",
+			"keycloak.extraVolumeMounts[0].name":       "home",
+			"keycloak.extraVolumeMounts[0].mountPath":  "/home/keycloak",
+			"keycloak.replicaCount":                    1,
+
+			"oauth2-proxy.ingress.enabled":                true,
+			"oauth2-proxy.ingress.ingressClassName":       "nginx",
+			"oauth2-proxy.ingress.hostname":               "mlflow.mlflow-oidc-proxy-it.cluster",
+			"oauth2-proxy.ingress.extraTls[0].hosts[0]":   "mlflow.mlflow-oidc-proxy-it.cluster",
+			"oauth2-proxy.configuration.sessionStoreType": "redis",
+			"oauth2-proxy.image.registry":                 "local.host",
+			"oauth2-proxy.image.repository":               "mlflow-oidc-proxy/oauth2-proxy",
+			"oauth2-proxy.image.tag":                      gingk8s.DefaultExtraCustomImageTags[0],
+			"oauth2-proxy.image.pullPolicy":               "Never",
+			"oauth2-proxy.hostAliases[0].ip":              getIngressControllerIP,
+			"oauth2-proxy.hostAliases[0].hostnames[0]":    "keycloak.mlflow-oidc-proxy-it.cluster",
+			"oauth2-proxy.replicaCount":                   1,
+
+			"mlflow-oidc-proxy.image.pullPolicy": "Never",
+			"mlflow-oidc-proxy.image.repository": mlflowOIDCProxyImage.WithTag(""),
+			"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultExtraCustomImageTags[0],
+			//"mlflow-oidc-proxy.image.tag":        gingk8s.DefaultCustomImageTag,
+			"mlflow-oidc-proxy.config.yaml.tls.terminated":                               true,
+			"mlflow-oidc-proxy.config.yaml.robots.robots[0].name":                        "robot-1",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[0].token.realm_access.roles[0]": "tenant-1",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[0].token.preferred_username":    "robot-1",
+
+			"mlflow-oidc-proxy.config.yaml.robots.robots[1].name":                        "robot-2",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[1].type":                        "mtls",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[1].token.realm_access.roles[0]": "tenant-2",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[1].token.preferred_username":    "robot-2",
+
+			"mlflow-oidc-proxy.config.yaml.robots.robots[2].name":                        "robot-3",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[2].type":                        "token",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[2].token.realm_access.roles[0]": "tenant-1",
+			"mlflow-oidc-proxy.config.yaml.robots.robots[2].token.preferred_username":    "robot-3",
+
+			"mlflow-oidc-proxy.ingress.enabled":  true,
+			"mlflow-oidc-proxy.ingress.hostname": "mlflow-api.mlflow-oidc-proxy-it.cluster",
+			"mlflow-oidc-proxy.replicaCount":     1,
+
+			"keycloakJob.extraClients[0].id":          "jupyterhub",
+			"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
+			"keycloakJob.extraClients[0].callbackURL": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
+
+			"postgres.extraUsers.jupyterhub[0]":    "login",
+			"postgres.extraDatabases.jupyterhub":   "jupyterhub",
+			"postgres.extraSpec.numberOfInstances": 1,
+
+			"mlflow.tenants[0].id":       "tenant-1",
+			"mlflow.tenants[0].name":     "Tenant 1",
+			"mlflow.tenants[1].id":       "tenant-2",
+			"mlflow.tenants[1].name":     "Tenant 2",
+			"mlflow.values.replicaCount": 1,
+
+			"minio.enabled": false,
+
+			"mlflow.objectStore.enabled":       false,
+			"mlflow.pvcStore.enabled":          true,
+			"mlflow.pvcStore.storageClassName": "shared-local-path",
+		},
+	}
+
 	mlflowMultitenantDefaults = gingk8s.HelmRelease{
 		Name: "mlflow-multitenant",
 		Chart: &gingk8s.HelmChart{
 			LocalChartInfo: gingk8s.LocalChartInfo{
-				Path:             "deploy/helm/mlflow-multitenant",
-				DependencyUpdate: true,
+				Path: "deploy/helm/mlflow-multitenant",
+				// DependencyUpdate: true,
 			},
 		},
 		UpgradeFlags: []string{"--wait-for-jobs", "--timeout=30m"},

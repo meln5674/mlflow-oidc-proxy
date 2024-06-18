@@ -627,65 +627,13 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 			ingressNginxID,
 		)
 
-		waitForIngressWebhookID := gk8s.ClusterAction(clusterID, "Wait for Ingress Webhook", gingk8s.ClusterAction(waitForIngressWebhook), ingressNginxID)
-
-		waitForPostgresDeletionID := gk8s.ClusterAction(clusterID, "Wait for postgres to be cleaned up before deleting operator", waitForPostgresDeletion, mlflowDepsID)
-
-		mlflowID := gk8s.Release(clusterID, &mlflowMultitenant,
-			mlflowDepsID,
-			waitForIngressWebhookID,
-			waitForPostgresDeletionID,
-		)
-
-		gk8s.ClusterAction(clusterID, "Clean up keycloak secret on finish", gingk8s.ClusterCleanupAction(func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
-			return g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-oidc", "--ignore-not-found").Run()
-		}), mlflowID)
+		gk8s.ClusterAction(clusterID, "Wait for postgres to be cleaned up before deleting operator", waitForPostgresDeletion, mlflowDepsID)
 
 		gk8s.ClusterAction(clusterID, "Ingress Logs", &gingk8s.KubectlLogger{
 			Kind:        "ds",
 			Name:        "ingress-nginx-controller",
 			RetryPeriod: 15 * time.Second,
 		}, ingressNginxID)
-		gk8s.ClusterAction(clusterID, "Oauth2 Proxy Logs", &gingk8s.KubectlLogger{
-			Kind:        "deploy",
-			Name:        "mlflow-multitenant-oauth2-proxy",
-			RetryPeriod: 15 * time.Second,
-		}, mlflowID)
-
-		certsID := gk8s.Manifests(clusterID, &certsNoIssuer, mlflowDepsID, mlflowID)
-
-		postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, mlflowID)
-
-		jupyterhubID := gk8s.Release(clusterID, &jupyterhub2,
-			mlflowID,
-			waitForIngressWebhookID, postgresSecretsReadyID,
-		)
-
-		keycloakSetupID := gk8s.ClusterAction(
-			clusterID,
-			"Create Keycloak Realm, Users, and Clients",
-			gingk8s.ClusterAction(keycloakSetup(
-				"mlflow-multitenant-keycloak-0",
-				"REALM=mlflow-multitenant",
-				"USERS_ONLY=1",
-				"KEYCLOAK_URL=https://mlflow-multitenant-keycloak.default.svc.cluster.local",
-			)),
-			mlflowID,
-		)
-
-		/*terminals := */
-		_ = gingk8s.ResourceDependencies{
-			Releases: []gingk8s.ReleaseID{
-				jupyterhubID,
-				mlflowID,
-			},
-			Manifests: []gingk8s.ManifestsID{
-				certsID,
-			},
-			ClusterActions: []gingk8s.ClusterActionID{
-				keycloakSetupID,
-			},
-		}
 
 		// gk8s.ClusterAction(clusterID, "Describe Pods on Failure", gingk8s.ClusterCleanupAction(DescribePods), &terminals)
 
@@ -694,7 +642,83 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 		gk8s.Setup(ctx)
 	})
 
-	s.cases("mlflow-multitenant-robot-robot-1", "mlflow-multitenant-robot-robot-3", "mlflow-multitenant-robot-robot-1")
+	When("using object store", func() {
+		BeforeAll(func() {
+			gk8s := s.g
+			mlflowID := gk8s.Release(clusterID, &mlflowMultitenantObjectStore)
+			gk8s.ClusterAction(
+				clusterID,
+				"Create Keycloak Realm, Users, and Clients",
+				gingk8s.ClusterAction(keycloakSetup(
+					"mlflow-multitenant-keycloak-0",
+					"REALM=mlflow-multitenant",
+					"USERS_ONLY=1",
+					"KEYCLOAK_URL=https://mlflow-multitenant-keycloak.default.svc.cluster.local",
+				)),
+				mlflowID,
+			)
+			gk8s.ClusterAction(clusterID, "Oauth2 Proxy Logs", &gingk8s.KubectlLogger{
+				Kind:        "deploy",
+				Name:        "mlflow-multitenant-oauth2-proxy",
+				RetryPeriod: 15 * time.Second,
+			}, mlflowID)
+			gk8s.ClusterAction(clusterID, "Clean up keycloak secret on finish", gingk8s.ClusterCleanupAction(func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
+				return g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-oidc", "--ignore-not-found").Run()
+			}), mlflowID)
+			gk8s.Manifests(clusterID, &certsNoIssuer, mlflowID)
+
+			postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, mlflowID)
+
+			gk8s.Release(clusterID, &jupyterhub2,
+				mlflowID,
+				postgresSecretsReadyID,
+			)
+			ctx, cancel := context.WithCancel(context.Background())
+			DeferCleanup(cancel)
+			gk8s.Setup(ctx)
+		})
+		s.cases("mlflow-multitenant-robot-robot-1", "mlflow-multitenant-robot-robot-3", "mlflow-multitenant-robot-robot-1")
+	})
+
+	When("using pvc store", func() {
+		BeforeAll(func() {
+			gk8s := s.g
+			mlflowID := gk8s.Release(clusterID, &mlflowMultitenantPVCStore)
+			gk8s.ClusterAction(
+				clusterID,
+				"Create Keycloak Realm, Users, and Clients",
+				gingk8s.ClusterAction(keycloakSetup(
+					"mlflow-multitenant-keycloak-0",
+					"REALM=mlflow-multitenant",
+					"USERS_ONLY=1",
+					"KEYCLOAK_URL=https://mlflow-multitenant-keycloak.default.svc.cluster.local",
+				)),
+				mlflowID,
+			)
+			gk8s.ClusterAction(clusterID, "Oauth2 Proxy Logs", &gingk8s.KubectlLogger{
+				Kind:        "deploy",
+				Name:        "mlflow-multitenant-oauth2-proxy",
+				RetryPeriod: 15 * time.Second,
+			}, mlflowID)
+			gk8s.ClusterAction(clusterID, "Clean up keycloak secret on finish", gingk8s.ClusterCleanupAction(func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
+				return g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-oidc", "--ignore-not-found").Run()
+			}), mlflowID)
+
+			gk8s.Manifests(clusterID, &certsNoIssuer, mlflowID)
+
+			postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, mlflowID)
+
+			gk8s.Release(clusterID, &jupyterhub2,
+				mlflowID,
+				postgresSecretsReadyID,
+			)
+			ctx, cancel := context.WithCancel(context.Background())
+			DeferCleanup(cancel)
+			gk8s.Setup(ctx)
+		})
+		s.cases("mlflow-multitenant-robot-robot-1", "mlflow-multitenant-robot-robot-3", "mlflow-multitenant-robot-robot-1")
+	})
+
 })
 
 var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {

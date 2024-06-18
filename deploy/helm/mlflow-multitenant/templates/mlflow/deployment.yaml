@@ -52,6 +52,7 @@ spec:
               secretKeyRef:
                 name: {{ tpl $dot.Values.mlflow.database.credentials.existingSecret.nameTemplate $tplArg }}
                 key: {{ $dot.Values.mlflow.database.credentials.existingSecret.passwordKey }}
+          {{- if $dot.Values.mlflow.objectStore.enabled }}
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -65,6 +66,7 @@ spec:
           {{- if $dot.Values.minio.enabled }}
           - name: MLFLOW_S3_ENDPOINT_URL
             value: http://{{ include "mlflow-multitenant.fullname" $dot }}-minio:9000 {{/* TODO: Template this out based on other info */}}
+          {{- end }}
           {{- end }}
           {{- with .Values.extraEnv }}
           {{- . | toYaml | nindent 10 }}
@@ -80,10 +82,12 @@ spec:
           {{ $staticPrefix := print "/" (join "/" $staticPrefixParts) }}
           args:
           - --static-prefix={{ $staticPrefix }}
-          - --backend-store-uri={{ tpl $.Values.mlflow.database.uriTemplate $tplArg }}
+          - --backend-store-uri={{ tpl $dot.Values.mlflow.database.uriTemplate $tplArg }}
           - --serve-artifacts
-          - --artifacts-destination={{ tpl $.Values.mlflow.objectStore.uriTemplate $tplArg }}
           - --default-artifact-root=mlflow-artifacts:/
+          {{- if $dot.Values.mlflow.objectStore.enabled }}
+          - --artifacts-destination={{ tpl $dot.Values.mlflow.objectStore.uriTemplate $tplArg }}
+          {{- end }}
           {{- with .Values.extraArgs }}
           {{- . | toYaml | nindent 10 }}
           {{- end }}
@@ -108,6 +112,11 @@ spec:
           - name: scripts
             mountPath: /var/run/requirements.txt
             subPath: requirements.txt
+          {{- if $dot.Values.mlflow.pvcStore.enabled }}
+          - name: artifacts
+            mountPath: /mlartifacts
+            subPath: {{ tpl $dot.Values.mlflow.pvcStore.subpathTemplate $tplArg }}
+          {{- end }}
           {{- with .Values.volumeMounts }}
           {{- . | toYaml | nindent 10 }}
           {{- end }}
@@ -128,6 +137,11 @@ spec:
         configMap:
           name: {{ include "mlflow-multitenant.tenant.fullname" (list . $tenant) }}
           defaultMode: 0555
+      {{- if $dot.Values.mlflow.pvcStore.enabled }}
+      - name: artifacts
+        persistentVolumeClaim:
+          claimName: {{ include "mlflow-multitenant.fullname" $dot }}
+      {{- end }}
       {{- with .Values.volumes }}
       {{- . | toYaml | nindent 6 }}
       {{- end }}

@@ -1,0 +1,17 @@
+{{ if .Values.mlflow.pvcStore.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mlflow-multitenant.fullname" . }}
+  labels:
+    {{- include "mlflow-multitenant.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.mlflow.pvcStore.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  accessModes:
+  {{- .Values.mlflow.pvcStore.accessModes | toYaml | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.mlflow.pvcStore.size }}
+{{- end }}

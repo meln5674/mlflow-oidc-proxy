@@ -20,6 +20,9 @@ variables:
   minio:
     on: []
     off: ['no-minio']
+  pvc:
+    off: []
+    on: ['pvc-store']
   tenants:
     zero: []
     one: ['single-tenant']
@@ -32,3 +35,6 @@ variables:
   robots:
     off: []
     on: ['robots']
+restrictions:
+  no-minio-and-pvc: {minio: on, pvc: on}
+  store-required: {minio: off, pvc: off}
