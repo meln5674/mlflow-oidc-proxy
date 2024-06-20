@@ -55,14 +55,15 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	}
 
 	gk8s.Options(gingk8s.SuiteOpts{
-		NoSuiteCleanup: true,
-		NoSpecCleanup:  true,
-		Kubectl:        localKubectl,
+		// NoSuiteCleanup: true,
+		// NoSpecCleanup:  true,
+		Kubectl: localKubectl,
 		Helm: &gingk8s.HelmCommand{
 			Command: []string{"bin/helm"},
 		},
-		Manifests:     localKubectl,
-		NoCacheImages: os.Getenv("IS_CI") != "",
+		Manifests: localKubectl,
+		// NoCacheImages: os.Getenv("IS_CI") != "",
+		KLogFlags: []string{"-v", "10"},
 	})
 
 	keycloakSetupScript, err = os.ReadFile("integration-test/keycloak-setup.sh")
