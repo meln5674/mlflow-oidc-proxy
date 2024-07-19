@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -310,9 +311,6 @@ spec:
 				"type": "ClusterIP",
 			},
 			"kind": "DaemonSet",
-			"hostPort": gingk8s.Object{
-				"enabled": true,
-			},
 		},
 	}
 
@@ -372,7 +370,7 @@ spec:
 		Set: gingk8s.Object{
 			"controllerAddresses[0].className": "nginx",
 			"controllerAddresses[0].address":   "ingress-nginx-controller.default.svc.cluster.local",
-			"hostPort.enabled":                 "true",
+			"service.type":                     "NodePort",
 		},
 		NoWait: true,
 	}
@@ -938,8 +936,8 @@ spec:
 		"hub.config.GenericOAuthenticator.username_key":       "preferred_username",
 		"hub.config.GenericOAuthenticator.client_id":          "jupyterhub",
 		"hub.config.GenericOAuthenticator.login_service":      "Keycloak",
-		"hub.extraEnv.http_proxy":                             "http://kube-ingress-proxy:80",
-		"hub.extraEnv.https_proxy":                            "http://kube-ingress-proxy:80",
+		"hub.extraEnv.http_proxy":                             getProxyURL,
+		"hub.extraEnv.https_proxy":                            getProxyURL,
 		"hub.extraEnv.no_proxy":                               "localhost",
 		"hub.extraVolumes[0].name":                            "tls",
 		"hub.extraVolumeMounts[0].name":                       "tls",
@@ -947,8 +945,8 @@ spec:
 		"hub.extraVolumeMounts[0].subPath":                    "ca.crt",
 		"singleuser.image.name":                               jupyterhubImage.WithTag(""),
 		"singleuser.image.tag":                                gingk8s.DefaultCustomImageTag,
-		"singleuser.extraEnv.http_proxy":                      "http://kube-ingress-proxy:80",
-		"singleuser.extraEnv.https_proxy":                     "http://kube-ingress-proxy:80",
+		"singleuser.extraEnv.http_proxy":                      getProxyURL,
+		"singleuser.extraEnv.https_proxy":                     getProxyURL,
 		"singleuser.extraEnv.no_proxy":                        "localhost",
 		"singleuser.storage.extraVolumes[0].name":             "tls",
 		"singleuser.storage.extraVolumeMounts[0].name":        "tls",
@@ -1279,4 +1277,31 @@ func clearJupyterhubKeycloakSecrets(g gingk8s.Gingk8s, ctx context.Context, clus
 	return gosh.Then(
 		g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-jupyterhub-oidc"),
 	).Run()
+}
+
+var (
+	ingressProxyPort int32
+	ingressProxyHost string
+	ingressProxyLock sync.Mutex
+)
+
+func getProxyURL(g gingk8s.Gingk8s, ctx context.Context, c gingk8s.Cluster) (string, error) {
+	ingressProxyLock.Lock()
+	defer ingressProxyLock.Unlock()
+	if ingressProxyPort == 0 {
+		ports, err := g.KubectlGetServiceNodePorts(ctx, &cluster, "kube-ingress-proxy")
+		if err != nil {
+			return "", err
+		}
+		ingressProxyPort = ports["http"]
+	}
+	if ingressProxyHost == "" {
+		info, err := cluster.GetNetworkInfo(ctx, g)
+		if err != nil {
+			return "", err
+		}
+		ingressProxyHost = info.NodeIPs[info.NodeHostnames[0]]
+	}
+
+	return fmt.Sprintf("http://%s:%d", ingressProxyHost, ingressProxyPort), nil
 }

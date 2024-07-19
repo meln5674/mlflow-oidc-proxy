@@ -217,9 +217,11 @@ func (s *subSuite) keycloakLogin(needCredentials bool) {
 	Eventually(b.Location, "30s").Should(Equal(fmt.Sprintf("https://%s/", oauth2Proxy.Set["ingress.hostname"])))
 }
 
-func (s *subSuite) sessionSetup() {
+func (s *subSuite) sessionSetup(ctx context.Context, g gingk8s.Gingk8s) {
+	proxy, err := getProxyURL(g, ctx, &cluster)
+	Expect(err).ToNot(HaveOccurred())
 	biloba.SpinUpChrome(GinkgoT(),
-		chromedp.ProxyServer("http://localhost:8080"),
+		chromedp.ProxyServer(proxy),
 		//chromedp.Flag("headless", false),
 		chromedp.Flag("ignore-certificate-errors", "1"),
 	)
@@ -387,8 +389,8 @@ func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string)
 }
 
 func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSecretName string) {
-	var _ = BeforeEach(func() {
-		s.sessionSetup()
+	var _ = BeforeEach(func(ctx context.Context) {
+		s.sessionSetup(ctx, s.g)
 		s.b.Prepare()
 	})
 	Describe("Tenant 1", func() {
@@ -433,13 +435,15 @@ func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSec
 			Expect(pool.AppendCertsFromPEM([]byte(robotCA))).To(BeTrue())
 
 			mlflowTenantURL := fmt.Sprintf("https://%s/tenants/tenant-2/", oauth2Proxy.Set["ingress.hostname"])
+			proxy, err := getProxyURL(gk8s, ctx, &cluster)
+			Expect(err).ToNot(HaveOccurred())
 			client := &http.Client{
 				Transport: &http.Transport{
 					TLSClientConfig: &tls.Config{
 						RootCAs:      pool,
 						Certificates: []tls.Certificate{keypair},
 					},
-					Proxy: func(*http.Request) (*url.URL, error) { return url.Parse("http://localhost:8080") },
+					Proxy: func(*http.Request) (*url.URL, error) { return url.Parse(proxy) },
 				},
 			}
 			resp, err := client.Get(mlflowTenantURL)
@@ -456,12 +460,14 @@ func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSec
 			Expect(pool.AppendCertsFromPEM([]byte(robotCA))).To(BeTrue())
 
 			mlflowTenantURL := fmt.Sprintf("https://%s/tenants/tenant-2/", oauth2Proxy.Set["ingress.hostname"])
+			proxy, err := getProxyURL(gk8s, ctx, &cluster)
+			Expect(err).ToNot(HaveOccurred())
 			client := &http.Client{
 				Transport: &http.Transport{
 					TLSClientConfig: &tls.Config{
 						RootCAs: pool,
 					},
-					Proxy: func(*http.Request) (*url.URL, error) { return url.Parse("http://localhost:8080") },
+					Proxy: func(*http.Request) (*url.URL, error) { return url.Parse(proxy) },
 				},
 			}
 			req, err := http.NewRequest(http.MethodGet, mlflowTenantURL, nil)
