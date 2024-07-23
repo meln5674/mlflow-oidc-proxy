@@ -17,12 +17,10 @@ variables:
   postgres:
     on: []
     off: ['no-postgres']
-  minio:
-    on: []
-    off: ['no-minio']
-  pvc:
-    off: []
-    on: ['pvc-store']
+  storage:
+    external: ['no-minio']
+    minio: []
+    pvc: ['pvc-store']
   tenants:
     zero: []
     one: ['single-tenant']
@@ -35,6 +33,36 @@ variables:
   robots:
     off: []
     on: ['robots']
-restrictions:
-  no-minio-and-pvc: {minio: on, pvc: on}
-  store-required: {minio: off, pvc: off}
+requirements:
+  # keycloak, oauth2, and the robots are only interacted w/ by the proxy,
+  # so we don't have to bother testing external ones different permutations of mlflow itself
+  test1.1:
+    if: {keycloak: off}
+    then: {mlflow-values: none, storage: minio}
+  test1.2:
+    if: {oauth2-proxy: off}
+    then: {mlflow-values: none, storage: minio}
+  test1.3:
+    if: {robots: off}
+    then: {mlflow-values: none, storage: minio}
+  test1.4:
+    if: {mlflow-oidc-proxy: off}
+    then: {mlflow-values: none, storage: minio}
+
+  # And counter to that, if we are testing mlflow itself,
+  # we don't need to test permiations of the proxy components
+  test2.1:
+    if: {mlflow-values: values}
+    then: {keycloak: on, oauth2-proxy: on, mlflow-oidc-proxy: on, robots: on}
+  test2.2:
+    if: {mlflow-values: values-template}
+    then: {keycloak: on, oauth2-proxy: on, mlflow-oidc-proxy: on, robots: on}
+  test2.3:
+    if: {mlflow-values: values-and-template}
+    then: {keycloak: on, oauth2-proxy: on, mlflow-oidc-proxy: on, robots: on}
+  test2.4:
+    if: {storage: minio}
+    then: {keycloak: on, oauth2-proxy: on, mlflow-oidc-proxy: on, robots: on}
+  test2.5:
+    if: {storage: pvc}
+    then: {keycloak: on, oauth2-proxy: on, mlflow-oidc-proxy: on, robots: on}
