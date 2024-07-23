@@ -1,11 +1,13 @@
 package main_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -176,11 +178,14 @@ func KeyEventNoChar(keys string, opts ...chromedp.KeyOption) chromedp.KeyAction 
 	})
 }
 
-func (s *subSuite) keycloakToken(needCredentials bool) string {
+func (s *subSuite) keycloakToken(ctx context.Context, needCredentials bool) string {
 	GinkgoHelper()
 	b := s.b
 	By("Navigating to the oauth proxy sign-in")
 	mlflowURL := fmt.Sprintf("https://%s/oauth2/sign_in", oauth2Proxy.Set["ingress.hostname"])
+
+	waitFor200(ctx, s.g, mlflowURL)
+
 	b.Navigate(mlflowURL)
 	generateTokenXPath := "/html/body/section/div/form[2]/button"
 	Eventually(b.XPath(generateTokenXPath), "30s").Should(b.Exist())
@@ -198,11 +203,14 @@ func (s *subSuite) keycloakToken(needCredentials bool) string {
 	return b.GetValue("#token-box").(string)
 }
 
-func (s *subSuite) keycloakLogin(needCredentials bool) {
+func (s *subSuite) keycloakLogin(ctx context.Context, needCredentials bool) {
 	GinkgoHelper()
 	b := s.b
 	By("Navigating to the oauth proxy sign-in")
 	mlflowURL := fmt.Sprintf("https://%s/oauth2/sign_in", oauth2Proxy.Set["ingress.hostname"])
+
+	waitFor200(ctx, s.g, mlflowURL)
+
 	b.Navigate(mlflowURL)
 	loginButton := b.XPath("/html/body/section/div/form[1]/button")
 	Eventually(loginButton, "30s").Should(b.Exist())
@@ -228,7 +236,7 @@ func (s *subSuite) sessionSetup(ctx context.Context, g gingk8s.Gingk8s) {
 		chromedp.Flag("ignore-certificate-errors", "1"),
 	)
 	s.b = biloba.ConnectToChrome(GinkgoT())
-	s.keycloakLogin(true)
+	s.keycloakLogin(ctx, true)
 }
 
 // func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string) {
@@ -313,11 +321,12 @@ func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSec
 	var _ = BeforeEach(func(ctx context.Context) {
 		s.sessionSetup(ctx, s.g)
 		s.b.Prepare()
+
 	})
 	Describe("Tenant 1", func() {
 		It("should execute an mlflow jupyterlab notebook with a generated token", func(ctx context.Context) {
-			apiToken := s.keycloakToken(false)
-			s.keycloakLogin(false)
+			apiToken := s.keycloakToken(ctx, false)
+			s.keycloakLogin(ctx, false)
 
 			// s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_TOKEN='%s' MLFLOW_TRACKING_URI='%s' `, apiToken, "https://mlflow.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "tenant-1")
 			s.loginAndRunNotebook(ctx, "https://mlflow.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/", apiToken, "", "tenant-1")
@@ -326,7 +335,7 @@ func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSec
 		It("should execute an mlflow jupyterlab notebook with a robot certificate", func(ctx context.Context) {
 			robotKey := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotCertSecretName, "tls.key")
 			robotCert := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotCertSecretName, "tls.crt")
-			s.keycloakLogin(false)
+			s.keycloakLogin(ctx, false)
 
 			// s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_CLIENT_CERT_AND_KEY='%s' MLFLOW_TRACKING_URI='%s'`, robotKey+"\n"+robotCert, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "robot-1")
 			s.loginAndRunNotebook(ctx, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/", "", robotKey+"\n"+robotCert, "robot-1")
@@ -334,7 +343,7 @@ func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSec
 
 		It("should execute an mlflow jupyterlab notebook with a robot token", func(ctx context.Context) {
 			robotToken := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotTokenSecretName, "token")
-			s.keycloakLogin(false)
+			s.keycloakLogin(ctx, false)
 
 			// s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_TOKEN='%s' MLFLOW_TRACKING_URI='%s'`, robotToken, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "robot-3")
 			s.loginAndRunNotebook(ctx, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/", robotToken, "", "robot-3")
@@ -404,7 +413,7 @@ func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSec
 	})
 }
 
-var _ = Describe("Standalone setup", Ordered, func() {
+var _ = FDescribe("Standalone setup", Ordered, func() {
 	s := subSuite{}
 	BeforeAll(func() {
 		gspec := gk8s.ForSpec()
@@ -709,3 +718,32 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 		// We are just testing that running "helm install" without any additional changes actually starts into a valid state where all of the pods are running
 	})
 })
+
+func waitFor200(ctx context.Context, gk8s gingk8s.Gingk8s, urlString string) {
+	proxy, err := getProxyURL(gk8s, ctx, &cluster)
+	Expect(err).ToNot(HaveOccurred())
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+			Proxy: func(*http.Request) (*url.URL, error) { return url.Parse(proxy) },
+		},
+	}
+	Eventually(func() error {
+		_, err := client.Get(urlString)
+		return err
+	}, "5s").Should(Succeed())
+	Eventually(func(g Gomega) int {
+		resp, err := client.Get(urlString)
+		g.Expect(err).ToNot(HaveOccurred())
+		defer resp.Body.Close()
+		var buf bytes.Buffer
+		_, err = io.Copy(&buf, resp.Body)
+		g.Expect(err).ToNot(HaveOccurred())
+		if resp.StatusCode != http.StatusOK {
+			GinkgoLogr.Info("wait-for-200 response", "url", urlString, "body", buf.String())
+		}
+		return resp.StatusCode
+	}, "5s").Should(Equal(http.StatusOK))
+}

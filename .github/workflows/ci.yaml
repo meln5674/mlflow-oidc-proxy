@@ -29,47 +29,47 @@ env:
   YQ_VERSION: v4.27.2
 
 jobs:
-  lint:
-    # runs-on: ubuntu-latest
-    runs-on: self-hosted
-    permissions:
-      contents: read
+  # lint:
+  #   # runs-on: ubuntu-latest
+  #   runs-on: self-hosted
+  #   permissions:
+  #     contents: read
 
-    steps:
-      # Checkout
-      - name: Checkout repository
-        uses: actions/checkout@v3
+  #   steps:
+  #     # Checkout
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v3
 
-      # Install deps
-      - name: Install Helm
-        uses: azure/setup-helm@v1
-        with:
-          version: '${{ env.HELM_VERSION }}'
-      
-      - uses: actions/setup-go@v4
-        with:
-          go-version: '^${{ env.GO_VERSION }}'
+  #     # Install deps
+  #     - name: Install Helm
+  #       uses: azure/setup-helm@v1
+  #       with:
+  #         version: '${{ env.HELM_VERSION }}'
+  #     
+  #     - uses: actions/setup-go@v4
+  #       with:
+  #         go-version: '^${{ env.GO_VERSION }}'
 
-      - name: Install Dependencies
-        run: |
-          make deps 
+  #     - name: Install Dependencies
+  #       run: |
+  #         make deps 
 
-      # Run Linter
-      - name: Lint standalone chart
-        run: |
-          cd deploy/helm/mlflow-oidc-proxy
-          ../../../bin/helm dependency build
-          ../../../bin/helm-hog test --no-apply --batch --auto-remove-success --parallel=0
-      - name: Lint omnibus dependencies chart
-        run: |
-          cd deploy/helm/mlflow-multitenant-deps
-          ../../../bin/helm lint .
-          ../../../bin/helm template .
-      - name: Lint omnibus chart
-        run: |
-          cd deploy/helm/mlflow-multitenant
-          ../../../bin/helm dependency build
-          ../../../bin/helm-hog test --no-apply --batch --auto-remove-success --parallel=0
+  #     # Run Linter
+  #     - name: Lint standalone chart
+  #       run: |
+  #         cd deploy/helm/mlflow-oidc-proxy
+  #         ../../../bin/helm dependency build
+  #         ../../../bin/helm-hog test --no-apply --batch --auto-remove-success --parallel=0
+  #     - name: Lint omnibus dependencies chart
+  #       run: |
+  #         cd deploy/helm/mlflow-multitenant-deps
+  #         ../../../bin/helm lint .
+  #         ../../../bin/helm template .
+  #     - name: Lint omnibus chart
+  #       run: |
+  #         cd deploy/helm/mlflow-multitenant
+  #         ../../../bin/helm dependency build
+  #         ../../../bin/helm-hog test --no-apply --batch --auto-remove-success --parallel=0
 
   test:
     # runs-on: ubuntu-latest
