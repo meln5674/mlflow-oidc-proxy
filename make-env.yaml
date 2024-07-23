@@ -1,0 +1,88 @@
+vars:
+  goOS: $(shell go env GOOS)
+  goArch: $(shell go env GOARCH)
+  dockerArch: x86_64
+
+
+tools:
+  yq:
+    http:
+      url: 'https://{{ .Vars.mirror }}/{{ .Vars.version }}/yq_{{ .Vars.goOS }}_{{ .Vars.goArch }}.tar.gz'
+      tar:
+        compression: gzip
+        path: './yq_{{ .Vars.goOS }}_{{ .Vars.goArch }}'
+    vars:
+      mirror: github.com/mikefarah/yq/releases/download
+      version: v4.44.1
+  ginkgo:
+    go:
+      module: github.com/onsi/ginkgo/v2
+      subPath: ginkgo
+      version: '{{ .Vars.version }}'
+    vars:
+      version: $(shell go mod edit -print | grep ginkgo | cut -d ' ' -f2)
+  kubectl:
+    http:
+      url: '{{ .Vars.mirror }}/{{ .Vars.version }}/bin/{{ .Vars.goOS }}/{{ .Vars.goArch }}/kubectl'
+    vars:
+      mirror: https://dl.k8s.io/release
+      version: v1.25.11
+  helm:
+    http:
+      url: 'https://get.helm.sh/helm-{{ .Vars.version }}-{{ .Vars.goOS }}-{{ .Vars.goArch }}.tar.gz'
+      tar:
+        compression: gzip
+        path: '{{ .Vars.goOS }}-{{ .Vars.goArch }}/helm'
+    vars:
+      mirror: https://dl.k8s.io/release
+      version: v3.12.2
+  docker:
+    http:
+      url: '{{ .Vars.mirror }}/{{ .Vars.dockerArch }}/docker-{{ .Vars.version }}.tgz'
+      tar:
+        compression: gzip
+        path: docker/docker
+    vars:
+      mirror: https://download.docker.com/linux/static/stable
+      version: 27.1.0
+  docker-buildx:
+    http:
+      url: '{{ .Vars.mirror }}/{{ .Vars.version }}/buildx-{{ .Vars.version }}.{{ .Vars.goOS }}-{{ .Vars.goArch }}'
+    vars:
+      mirror: https://github.com/docker/buildx/releases/download
+      version: v0.16.1
+  kind:
+    http:
+      url: '{{ .Vars.mirror }}/{{ .Vars.version }}/kind-{{ .Vars.goOS }}-{{ .Vars.goArch }}'
+    vars:
+      mirror: https://github.com/kubernetes-sigs/kind/releases/download
+      version: v0.17.0
+  helm-hog:
+    go:
+      module: github.com/meln5674/helm-hog
+      version: 3af9ec621dcc359e38e966a255571a39beefe624
+
+toolSets:
+  all-test-tools:
+  - ginkgo
+  all-e2e-tools:
+  - ginkgo
+  - kubectl
+  - helm
+  - docker
+  - kind
+  - helm-hog
+  all-helm-tools:
+  - yq
+  - helm
+  - helm-hog
+  - docker
+  - kind
+
+dockerfile:
+  from: docker.io/library/golang:1.20.4
+  goImage: docker.io/library/golang:1.19
+  curlImage: docker.io/alpine/curl:8.8.0
+  postCopy: |
+    RUN mkdir -p /usr/lib/docker/cli-plugins \
+     && ln -s ${LOCALBIN}/docker-buildx /usr/lib/docker/cli-plugins/

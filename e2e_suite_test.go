@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -40,6 +41,26 @@ var (
 	sharedLocalPathProvisionerImageID gingk8s.ThirdPartyImageID
 )
 
+var (
+	localbin     = os.Getenv("LOCALBIN")
+	localKubectl = gingk8s.KubectlCommand{
+		Command: []string{filepath.Join(localbin, "kubectl")},
+	}
+	localHelm = gingk8s.HelmCommand{
+		Command: []string{filepath.Join(localbin, "helm")},
+	}
+	localKind = gingk8s.KindCommand{Command: []string{filepath.Join(localbin, "kind")}}
+	gopts     = gingk8s.SuiteOpts{
+		// NoSuiteCleanup: true,
+		// NoSpecCleanup:  true,
+		Kubectl:   &localKubectl,
+		Helm:      &localHelm,
+		Manifests: &localKubectl,
+		// NoCacheImages: os.Getenv("IS_CI") != "",
+		KLogFlags: []string{"-v", "10"},
+	}
+)
+
 var _ = BeforeSuite(func(ctx context.Context) {
 	var err error
 
@@ -52,21 +73,8 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	Expect(os.WriteFile("modules/oauth2-proxy/Dockerfile", []byte(oauth2Dockerfile), 0x755))
 
 	gk8s = gingk8s.ForSuite(GinkgoT())
-	localKubectl := &gingk8s.KubectlCommand{
-		Command: []string{"bin/kubectl"},
-	}
 
-	gk8s.Options(gingk8s.SuiteOpts{
-		// NoSuiteCleanup: true,
-		// NoSpecCleanup:  true,
-		Kubectl: localKubectl,
-		Helm: &gingk8s.HelmCommand{
-			Command: []string{"bin/helm"},
-		},
-		Manifests: localKubectl,
-		// NoCacheImages: os.Getenv("IS_CI") != "",
-		KLogFlags: []string{"-v", "10"},
-	})
+	gk8s.Options(gopts)
 
 	keycloakSetupScript, err = os.ReadFile("integration-test/keycloak-setup.sh")
 	Expect(err).ToNot(HaveOccurred())
@@ -129,7 +137,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 var (
 	cluster = gingk8s.KindCluster{
 		Name:                   "mlflow-oidc-proxy",
-		KindCommand:            &gingk8s.KindCommand{Command: []string{"bin/kind"}},
+		KindCommand:            &localKind,
 		TempDir:                "integration-test",
 		ConfigFilePath:         "integration-test/kind.config",
 		ConfigFileTemplatePath: "integration-test/kind.config.template",

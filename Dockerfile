@@ -2,9 +2,11 @@ FROM golang:1.18 AS build
 
 WORKDIR /usr/src/mlflow-oidc-proxy
 
-COPY main.go go.mod go.sum ./
-COPY pkg ./pkg
+COPY go.mod go.sum ./
+RUN go mod download
 
+COPY main.go ./
+COPY pkg ./pkg
 RUN GCO_ENABLED=0 GOOS=linux go build -a -ldflags="-w -extldflags "-static"" -tags netgo main.go
 
 FROM alpine:3.16 AS certs
