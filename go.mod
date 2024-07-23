@@ -19,7 +19,7 @@ require (
 
 // Tests
 require (
-	github.com/meln5674/gingk8s v0.0.0-20240430035444-bb6d84b6627f
+	github.com/meln5674/gingk8s v0.0.0-20240723003411-9bc6e029697c
 	github.com/meln5674/gosh v0.0.0-20231019162727-b5f0766a9088
 	github.com/onsi/biloba v0.1.6
 	github.com/onsi/ginkgo/v2 v2.19.0

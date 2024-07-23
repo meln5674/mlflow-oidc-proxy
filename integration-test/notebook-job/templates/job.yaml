@@ -1,0 +1,98 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "notebook-job.fullname" . }}
+  labels:
+    {{- include "notebook-job.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "notebook-job.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: MLFLOW_TRACKING_URI
+            value: {{ .Values.mlflow.uri | default "" | toJson }}
+          - name: MLFLOW_TRACKING_TOKEN
+            value: {{ .Values.mlflow.token | default "" | toJson }}
+          - name: MLFLOW_TRACKING_CLIENT_CERT_AND_KEY
+            value: {{ .Values.mlflow.certAndKey | default "" | toJson }}
+          - name: http_proxy
+            value: '{{ .Values.proxy.url }}'
+          - name: https_proxy
+            value: '{{ .Values.proxy.url }}'
+          - name: no_proxy
+            value: '{{ .Values.proxy.noProxy }}'
+          command: [/src/integration-test/run-notebook.sh]
+          command: [/src/integration-test/run-notebook.sh]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          - mountPath: /tmp
+            name: tmp
+            subPath: tmp
+          # - mountPath: /home/jovyan
+          #   name: tmp
+          #   subPath: home/jovyan
+          - mountPath: /src
+            name: src
+          - mountPath: /output
+            name: output
+          {{- if .Values.mlflow.caSecret.name }}
+          - mountPath: /etc/ssl/certs/ca-certificates.crt
+            name: tls
+            subPath: {{ .Values.mlflow.caSecret.key }}
+          {{- end }}
+          workingDir: /tmp
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      # - name: home
+      #   persistentVolumeClaim:
+      #     claimName: {{ include "notebook-job.fullname" . }}
+      - name: src
+        hostPath:
+          type: Directory
+          path: {{ .Values.src.hostPath }}
+      - name: output
+        hostPath:
+          type: Directory
+          path: {{ .Values.output.hostPath }}
+      {{- with .Values.mlflow.caSecret.name }}
+      - name: tls
+        secret:
+          secretName: {{ . }}
+      {{- end }}
+

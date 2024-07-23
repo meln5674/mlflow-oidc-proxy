@@ -14,6 +14,13 @@ RUN apt-get update \
 #  && jupyter nbextension enable --py ipython_oidc_client \
 #  && jupyter serverextension enable --py ipython_oidc_client
 
-USER jupyter
+RUN pip install papermill
 
-env PATH=/home/jovyan/.local/bin:${PATH}
+ARG MLFLOW_VERSION=2.13.0
+RUN git clone https://github.com/alfozan/mlflow-example.git \
+ && sed -i 's/mlflow>=.*/mlflow=='"${MLFLOW_VERSION}"'/' mlflow-example/requirements.txt \
+ && pip install --user -r mlflow-example/requirements.txt
+
+USER jovyan
+
+ENV PATH=/home/jovyan/.local/bin:${PATH}

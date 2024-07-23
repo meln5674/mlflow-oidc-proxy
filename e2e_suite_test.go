@@ -23,20 +23,21 @@ func TestMlflowOidcProxy(t *testing.T) {
 }
 
 var (
-	gk8s                    gingk8s.Gingk8s
-	clusterID               gingk8s.ClusterID
-	mlflowOIDCProxyImageID  gingk8s.CustomImageID
-	jupyterhubImageID       gingk8s.CustomImageID
-	oauth2ProxyImageID      gingk8s.CustomImageID
-	kubectlImageID          gingk8s.ThirdPartyImageID
-	keycloakImageID         gingk8s.ThirdPartyImageID
-	redisImageID            gingk8s.ThirdPartyImageID
-	mlflowImageID           gingk8s.ThirdPartyImageID
-	kubeIngressProxyImageID gingk8s.ThirdPartyImageID
-	nginxImageID            gingk8s.ThirdPartyImageID
-	postgresImageIDs        gingk8s.ThirdPartyImageIDs
-	certManagerImageIDs     gingk8s.ThirdPartyImageIDs
-	minioImageIDs           gingk8s.ThirdPartyImageIDs
+	gk8s                              gingk8s.Gingk8s
+	clusterID                         gingk8s.ClusterID
+	mlflowOIDCProxyImageID            gingk8s.CustomImageID
+	jupyterhubImageID                 gingk8s.CustomImageID
+	oauth2ProxyImageID                gingk8s.CustomImageID
+	kubectlImageID                    gingk8s.ThirdPartyImageID
+	keycloakImageID                   gingk8s.ThirdPartyImageID
+	redisImageID                      gingk8s.ThirdPartyImageID
+	mlflowImageID                     gingk8s.ThirdPartyImageID
+	kubeIngressProxyImageID           gingk8s.ThirdPartyImageID
+	nginxImageID                      gingk8s.ThirdPartyImageID
+	postgresImageIDs                  gingk8s.ThirdPartyImageIDs
+	certManagerImageIDs               gingk8s.ThirdPartyImageIDs
+	minioImageIDs                     gingk8s.ThirdPartyImageIDs
+	sharedLocalPathProvisionerImageID gingk8s.ThirdPartyImageID
 )
 
 var _ = BeforeSuite(func(ctx context.Context) {
@@ -97,6 +98,8 @@ var _ = BeforeSuite(func(ctx context.Context) {
 
 	minioImageIDs = gk8s.ThirdPartyImages(minioImages...)
 
+	sharedLocalPathProvisionerImageID = gk8s.ThirdPartyImage(&sharedLocalPathProvisionerImage)
+
 	clusterID = gk8s.Cluster(&cluster,
 		mlflowOIDCProxyImageID,
 		jupyterhubImageID,
@@ -110,6 +113,7 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		postgresImageIDs,
 		certManagerImageIDs,
 		minioImageIDs,
+		sharedLocalPathProvisionerImageID,
 	)
 
 	gk8s.Release(clusterID, &sharedLocalPathProvisioner)
@@ -139,6 +143,10 @@ var (
 	watchEvents = &gingk8s.KubectlWatcher{
 		Kind:  "events",
 		Flags: []string{"--all-namespaces"},
+	}
+
+	sharedLocalPathProvisionerImage = gingk8s.ThirdPartyImage{
+		Name: "rancher/local-path-provisioner:v0.0.26",
 	}
 
 	sharedLocalPathProvisioner = gingk8s.HelmRelease{
@@ -788,12 +796,14 @@ spec:
 			"mlflow-oidc-proxy.ingress.hostname": "mlflow-api.mlflow-oidc-proxy-it.cluster",
 			"mlflow-oidc-proxy.replicaCount":     1,
 
-			"keycloakJob.extraClients[0].id":          "jupyterhub",
-			"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
-			"keycloakJob.extraClients[0].callbackURL": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
+			/*
+				"keycloakJob.extraClients[0].id":          "jupyterhub",
+				"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
+				"keycloakJob.extraClients[0].callbackURL": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
 
-			"postgres.extraUsers.jupyterhub[0]":    "login",
-			"postgres.extraDatabases.jupyterhub":   "jupyterhub",
+				"postgres.extraUsers.jupyterhub[0]":    "login",
+				"postgres.extraDatabases.jupyterhub":   "jupyterhub",
+			*/
 			"postgres.extraSpec.numberOfInstances": 1,
 
 			"mlflow.tenants[0].id":       "tenant-1",
@@ -805,6 +815,16 @@ spec:
 			"minio.resources.requests.memory": "250Mi",
 			"minio.replicas":                  1,
 			"minio.mode":                      "standalone",
+		},
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/mlflow-multitenant-tenant-1",
+				For:      map[string]string{"condition": "Available"},
+			},
+			{
+				Resource: "deploy/mlflow-multitenant-tenant-2",
+				For:      map[string]string{"condition": "Available"},
+			},
 		},
 	}
 
@@ -882,12 +902,14 @@ spec:
 			"mlflow-oidc-proxy.ingress.hostname": "mlflow-api.mlflow-oidc-proxy-it.cluster",
 			"mlflow-oidc-proxy.replicaCount":     1,
 
-			"keycloakJob.extraClients[0].id":          "jupyterhub",
-			"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
-			"keycloakJob.extraClients[0].callbackURL": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
+			/*
+				"keycloakJob.extraClients[0].id":          "jupyterhub",
+				"keycloakJob.extraClients[0].secretName":  "mlflow-multitenant-jupyterhub-oidc",
+				"keycloakJob.extraClients[0].callbackURL": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
 
-			"postgres.extraUsers.jupyterhub[0]":    "login",
-			"postgres.extraDatabases.jupyterhub":   "jupyterhub",
+				"postgres.extraUsers.jupyterhub[0]":    "login",
+				"postgres.extraDatabases.jupyterhub":   "jupyterhub",
+			*/
 			"postgres.extraSpec.numberOfInstances": 1,
 
 			"mlflow.tenants[0].id":       "tenant-1",
@@ -901,6 +923,16 @@ spec:
 			"mlflow.objectStore.enabled":       false,
 			"mlflow.pvcStore.enabled":          true,
 			"mlflow.pvcStore.storageClassName": "shared-local-path",
+		},
+		Wait: []gingk8s.WaitFor{
+			{
+				Resource: "deploy/mlflow-multitenant-tenant-1",
+				For:      map[string]string{"condition": "Available"},
+			},
+			{
+				Resource: "deploy/mlflow-multitenant-tenant-2",
+				For:      map[string]string{"condition": "Available"},
+			},
 		},
 	}
 
@@ -920,137 +952,140 @@ spec:
 		},
 	}
 
-	jupyterhubBaseSet = gingk8s.Object{
-		"proxy.service.type":       "ClusterIP",
-		"ingress.enabled":          "true",
-		"ingress.hosts[0]":         "jupyterhub.mlflow-oidc-proxy-it.cluster",
-		"ingress.ingressClassName": "nginx",
-		"ingress.tls[0].hosts[0]":  "jupyterhub.mlflow-oidc-proxy-it.cluster",
-		"hub.db.type":              "postgres",
+	/*
+		jupyterhubBaseSet = gingk8s.Object{
+			"proxy.service.type":       "ClusterIP",
+			"ingress.enabled":          "true",
+			"ingress.hosts[0]":         "jupyterhub.mlflow-oidc-proxy-it.cluster",
+			"ingress.ingressClassName": "nginx",
+			"ingress.tls[0].hosts[0]":  "jupyterhub.mlflow-oidc-proxy-it.cluster",
+			"hub.db.type":              "postgres",
 
-		"hub.db.upgrade": "true",
-		"hub.config.JupyterHub.authenticator_class":           "oauthenticator.generic.GenericOAuthenticator",
-		"hub.config.GenericOAuthenticator.oauth_callback_url": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
-		"hub.config.GenericOAuthenticator.scope[0]":           "openid",
-		"hub.config.GenericOAuthenticator.scope[1]":           "profile",
-		"hub.config.GenericOAuthenticator.username_key":       "preferred_username",
-		"hub.config.GenericOAuthenticator.client_id":          "jupyterhub",
-		"hub.config.GenericOAuthenticator.login_service":      "Keycloak",
-		"hub.extraEnv.http_proxy":                             getProxyURL,
-		"hub.extraEnv.https_proxy":                            getProxyURL,
-		"hub.extraEnv.no_proxy":                               "localhost",
-		"hub.extraVolumes[0].name":                            "tls",
-		"hub.extraVolumeMounts[0].name":                       "tls",
-		"hub.extraVolumeMounts[0].mountPath":                  "/etc/ssl/certs/ca-certificates.crt",
-		"hub.extraVolumeMounts[0].subPath":                    "ca.crt",
-		"singleuser.image.name":                               jupyterhubImage.WithTag(""),
-		"singleuser.image.tag":                                gingk8s.DefaultCustomImageTag,
-		"singleuser.extraEnv.http_proxy":                      getProxyURL,
-		"singleuser.extraEnv.https_proxy":                     getProxyURL,
-		"singleuser.extraEnv.no_proxy":                        "localhost",
-		"singleuser.storage.extraVolumes[0].name":             "tls",
-		"singleuser.storage.extraVolumeMounts[0].name":        "tls",
-		"singleuser.storage.extraVolumeMounts[0].mountPath":   "/etc/ssl/certs/ca-certificates.crt",
-		"singleuser.storage.extraVolumeMounts[0].subPath":     "ca.crt",
-		"singleuser.storage.extraVolumes[1].name":             "src",
-		"singleuser.storage.extraVolumes[1].hostPath.type":    "Directory",
-		"singleuser.storage.extraVolumes[1].hostPath.path":    "/mnt/host/mlflow-oidc-proxy",
-		"singleuser.storage.extraVolumeMounts[1].name":        "src",
-		"singleuser.storage.extraVolumeMounts[1].mountPath":   "/mnt/host/mlflow-oidc-proxy",
-	}
+			"hub.db.upgrade": "true",
+			"hub.config.JupyterHub.authenticator_class":           "oauthenticator.generic.GenericOAuthenticator",
+			"hub.config.GenericOAuthenticator.oauth_callback_url": "https://jupyterhub.mlflow-oidc-proxy-it.cluster/hub/oauth_callback",
+			"hub.config.GenericOAuthenticator.scope[0]":           "openid",
+			"hub.config.GenericOAuthenticator.scope[1]":           "profile",
+			"hub.config.GenericOAuthenticator.username_key":       "preferred_username",
+			"hub.config.GenericOAuthenticator.client_id":          "jupyterhub",
+			"hub.config.GenericOAuthenticator.login_service":      "Keycloak",
+			"hub.extraEnv.http_proxy":                             getProxyURL,
+			"hub.extraEnv.https_proxy":                            getProxyURL,
+			"hub.extraEnv.no_proxy":                               "localhost",
+			"hub.extraVolumes[0].name":                            "tls",
+			"hub.extraVolumeMounts[0].name":                       "tls",
+			"hub.extraVolumeMounts[0].mountPath":                  "/etc/ssl/certs/ca-certificates.crt",
+			"hub.extraVolumeMounts[0].subPath":                    "ca.crt",
+			"singleuser.image.name":                               jupyterhubImage.WithTag(""),
+			"singleuser.image.tag":                                gingk8s.DefaultCustomImageTag,
+			"singleuser.extraEnv.http_proxy":                      getProxyURL,
+			"singleuser.extraEnv.https_proxy":                     getProxyURL,
+			"singleuser.extraEnv.no_proxy":                        "localhost",
+			"singleuser.storage.extraVolumes[0].name":             "tls",
+			"singleuser.storage.extraVolumeMounts[0].name":        "tls",
+			"singleuser.storage.extraVolumeMounts[0].mountPath":   "/etc/ssl/certs/ca-certificates.crt",
+			"singleuser.storage.extraVolumeMounts[0].subPath":     "ca.crt",
+			"singleuser.storage.extraVolumes[1].name":             "src",
+			"singleuser.storage.extraVolumes[1].hostPath.type":    "Directory",
+			"singleuser.storage.extraVolumes[1].hostPath.path":    "/mnt/host/mlflow-oidc-proxy",
+			"singleuser.storage.extraVolumeMounts[1].name":        "src",
+			"singleuser.storage.extraVolumeMounts[1].mountPath":   "/mnt/host/mlflow-oidc-proxy",
+		}
 
-	jupyterhub = gingk8s.HelmRelease{
-		Name: "jupyterhub",
-		Chart: &gingk8s.HelmChart{
-			RemoteChartInfo: gingk8s.RemoteChartInfo{
-				Repo: &gingk8s.HelmRepo{
-					Name: "jupyterhub",
-					URL:  "https://jupyterhub.github.io/helm-chart/",
+		jupyterhub = gingk8s.HelmRelease{
+			Name: "jupyterhub",
+			Chart: &gingk8s.HelmChart{
+				RemoteChartInfo: gingk8s.RemoteChartInfo{
+					Repo: &gingk8s.HelmRepo{
+						Name: "jupyterhub",
+						URL:  "https://jupyterhub.github.io/helm-chart/",
+					},
+					Name:    "jupyterhub",
+					Version: "2.0.0",
 				},
-				Name:    "jupyterhub",
-				Version: "2.0.0",
 			},
-		},
-		Set: jupyterhubBaseSet.MergedFrom(gingk8s.Object{
-			"hub.config.GenericOAuthenticator.client_secret":       getKeycloakClientSecret("jupyterhub"),
-			"hub.extraVolumes[0].secret.secretName":                "test-cert",
-			"singleuser.storage.extraVolumes[0].secret.secretName": "test-cert",
-			"hub.db.password": func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) (string, error) {
-				var password string
-				err := g.KubectlGetSecretValue(ctx, cluster, "jupyterhub.postgres-postgres.credentials.postgresql.acid.zalan.do", "password", &password).Run()
-				return password, err
-			},
-			"hub.db.url": "postgresql+psycopg2://jupyterhub@postgres-postgres:5432/jupyterhub?sslmode=require",
-			"hub.config.GenericOAuthenticator.userdata_url":  "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/userinfo",
-			"hub.config.GenericOAuthenticator.token_url":     "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/token",
-			"hub.config.GenericOAuthenticator.authorize_url": "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/auth",
-		}),
-		Wait: []gingk8s.WaitFor{
-			{
-				Resource: "deploy/hub",
-				For:      map[string]string{"condition": "Available"},
-			},
-			{
-				Resource: "deploy/proxy",
-				For:      map[string]string{"condition": "Available"},
-			},
-		},
-	}
-
-	jupyterhub2 = gingk8s.HelmRelease{
-		Name: "jupyterhub",
-		Chart: &gingk8s.HelmChart{
-			RemoteChartInfo: gingk8s.RemoteChartInfo{
-				Repo: &gingk8s.HelmRepo{
-					Name: "jupyterhub",
-					URL:  "https://jupyterhub.github.io/helm-chart/",
+			Set: jupyterhubBaseSet.MergedFrom(gingk8s.Object{
+				"hub.config.GenericOAuthenticator.client_secret":       getKeycloakClientSecret("jupyterhub"),
+				"hub.extraVolumes[0].secret.secretName":                "test-cert",
+				"singleuser.storage.extraVolumes[0].secret.secretName": "test-cert",
+				"hub.db.password": func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) (string, error) {
+					var password string
+					err := g.KubectlGetSecretValue(ctx, cluster, "jupyterhub.postgres-postgres.credentials.postgresql.acid.zalan.do", "password", &password).Run()
+					return password, err
 				},
-				Name:    "jupyterhub",
-				Version: "2.0.0",
+				"hub.db.url": "postgresql+psycopg2://jupyterhub@postgres-postgres:5432/jupyterhub?sslmode=require",
+				"hub.config.GenericOAuthenticator.userdata_url":  "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/userinfo",
+				"hub.config.GenericOAuthenticator.token_url":     "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/token",
+				"hub.config.GenericOAuthenticator.authorize_url": "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/integration-test/protocol/openid-connect/auth",
+			}),
+			Wait: []gingk8s.WaitFor{
+				{
+					Resource: "deploy/hub",
+					For:      map[string]string{"condition": "Available"},
+				},
+				{
+					Resource: "deploy/proxy",
+					For:      map[string]string{"condition": "Available"},
+				},
 			},
-		},
-		Set: jupyterhubBaseSet.MergedFrom(gingk8s.Object{
-			"hub.config.GenericOAuthenticator.client_secret": func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) string {
-				return g.KubectlReturnSecretValue(ctx, cluster, "mlflow-multitenant-jupyterhub-oidc", "client-secret")
+		}
+
+		jupyterhub2 = gingk8s.HelmRelease{
+			Name: "jupyterhub",
+			Chart: &gingk8s.HelmChart{
+				RemoteChartInfo: gingk8s.RemoteChartInfo{
+					Repo: &gingk8s.HelmRepo{
+						Name: "jupyterhub",
+						URL:  "https://jupyterhub.github.io/helm-chart/",
+					},
+					Name:    "jupyterhub",
+					Version: "2.0.0",
+				},
 			},
-			"ingress.tls[0].secretName":                            "test-cert",
-			"hub.db.url":                                           "postgresql+psycopg2://jupyterhub@mlflow-multitenant-postgres:5432/jupyterhub?sslmode=require",
-			"hub.extraVolumes[0].secret.secretName":                "mlflow-multitenant-ca",
-			"singleuser.storage.extraVolumes[0].secret.secretName": "mlflow-multitenant-ca",
-			"hub.db.password": func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) (string, error) {
-				var password string
-				err := g.KubectlGetSecretValue(ctx, cluster, "jupyterhub.mlflow-multitenant-postgres.credentials.postgresql.acid.zalan.do", "password", &password).Run()
-				return password, err
+			Set: jupyterhubBaseSet.MergedFrom(gingk8s.Object{
+				"hub.config.GenericOAuthenticator.client_secret": func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) string {
+					return g.KubectlReturnSecretValue(ctx, cluster, "mlflow-multitenant-jupyterhub-oidc", "client-secret")
+				},
+				"ingress.tls[0].secretName":                            "test-cert",
+				"hub.db.url":                                           "postgresql+psycopg2://jupyterhub@mlflow-multitenant-postgres:5432/jupyterhub?sslmode=require",
+				"hub.extraVolumes[0].secret.secretName":                "mlflow-multitenant-ca",
+				"singleuser.storage.extraVolumes[0].secret.secretName": "mlflow-multitenant-ca",
+				"hub.db.password": func(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) (string, error) {
+					var password string
+					err := g.KubectlGetSecretValue(ctx, cluster, "jupyterhub.mlflow-multitenant-postgres.credentials.postgresql.acid.zalan.do", "password", &password).Run()
+					return password, err
+				},
+				"hub.config.GenericOAuthenticator.userdata_url":  "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/userinfo",
+				"hub.config.GenericOAuthenticator.token_url":     "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/token",
+				"hub.config.GenericOAuthenticator.authorize_url": "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/auth",
+			}),
+			Wait: []gingk8s.WaitFor{
+				{
+					Resource: "deploy/hub",
+					For:      map[string]string{"condition": "Available"},
+				},
+				{
+					Resource: "deploy/proxy",
+					For:      map[string]string{"condition": "Available"},
+				},
 			},
-			"hub.config.GenericOAuthenticator.userdata_url":  "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/userinfo",
-			"hub.config.GenericOAuthenticator.token_url":     "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/token",
-			"hub.config.GenericOAuthenticator.authorize_url": "https://keycloak.mlflow-oidc-proxy-it.cluster/realms/mlflow-multitenant/protocol/openid-connect/auth",
-		}),
-		Wait: []gingk8s.WaitFor{
-			{
-				Resource: "deploy/hub",
-				For:      map[string]string{"condition": "Available"},
-			},
-			{
-				Resource: "deploy/proxy",
-				For:      map[string]string{"condition": "Available"},
-			},
-		},
-	}
+		}
+	*/
 
 	kubectlImage          = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/kubectl:1.25.3"}
-	keycloakImage         = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/keycloak:21.0.2-debian-11-r0"}
-	redisImage            = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/redis:7.0.10-debian-11-r4"}
+	keycloakImage         = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/keycloak:24.0.4-debian-12-r1"}
+	redisImage            = &gingk8s.ThirdPartyImage{Name: "docker.io/bitnami/redis:7.2.5-debian-12-r0"}
 	mlflowImage           = &gingk8s.ThirdPartyImage{Name: "ghcr.io/mlflow/mlflow:v2.13.0"}
 	kubeIngressProxyImage = &gingk8s.ThirdPartyImage{Name: "ghcr.io/meln5674/kube-ingress-proxy:v0.3.0-rc1"}
 	postgresImages        = []*gingk8s.ThirdPartyImage{
 		&gingk8s.ThirdPartyImage{Name: "ghcr.io/zalando/spilo-15:3.0-p1"},
-		&gingk8s.ThirdPartyImage{Name: "registry.opensource.zalan.do/acid/postgres-operator:v1.10.0"},
+		&gingk8s.ThirdPartyImage{Name: "registry.opensource.zalan.do/acid/postgres-operator:v1.10.1"},
 	}
 	certManagerImages = []*gingk8s.ThirdPartyImage{
 		&gingk8s.ThirdPartyImage{Name: "quay.io/jetstack/cert-manager-cainjector:v1.11.1"},
 		&gingk8s.ThirdPartyImage{Name: "quay.io/jetstack/cert-manager-controller:v1.11.1"},
 		&gingk8s.ThirdPartyImage{Name: "quay.io/jetstack/cert-manager-webhook:v1.11.1"},
+		&gingk8s.ThirdPartyImage{Name: "quay.io/jetstack/cert-manager-ctl:v1.11.1"},
 	}
 	nginxImage  = &gingk8s.ThirdPartyImage{Name: "registry.k8s.io/ingress-nginx/controller:v1.7.0"}
 	minioImages = []*gingk8s.ThirdPartyImage{
@@ -1273,11 +1308,13 @@ func DescribePods(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluste
 	return g.Kubectl(ctx, cluster, "describe", "pods").Run()
 }
 
+/*
 func clearJupyterhubKeycloakSecrets(g gingk8s.Gingk8s, ctx context.Context, cluster gingk8s.Cluster) error {
 	return gosh.Then(
 		g.Kubectl(ctx, cluster, "delete", "secret", "mlflow-multitenant-jupyterhub-oidc"),
 	).Run()
 }
+*/
 
 var (
 	ingressProxyPort int32
@@ -1304,4 +1341,31 @@ func getProxyURL(g gingk8s.Gingk8s, ctx context.Context, c gingk8s.Cluster) (str
 	}
 
 	return fmt.Sprintf("http://%s:%d", ingressProxyHost, ingressProxyPort), nil
+}
+
+func notebookJob(uri, token, certAndKey, caSecretName, outputDir string) *gingk8s.HelmRelease {
+	return &gingk8s.HelmRelease{
+		Name: "run-notebook",
+		Chart: &gingk8s.HelmChart{
+			LocalChartInfo: gingk8s.LocalChartInfo{
+				Path: "integration-test/notebook-job",
+				// DependencyUpdate: true,
+			},
+		},
+		UpgradeFlags: []string{"--wait-for-jobs", "--timeout=30m"},
+		Set: gingk8s.Object{
+			"fullnameOverride":          "run-notebook",
+			"securityContext.runAsUser": 0,
+			"image.repository":          jupyterhubImage.WithTag(""),
+			"image.tag":                 gingk8s.DefaultExtraCustomImageTags[0],
+			"src.hostPath":              "/mnt/host/mlflow-oidc-proxy",
+			"output.hostPath":           outputDir,
+			"mlflow.uri":                uri,
+			"mlflow.caSecret.name":      caSecretName,
+			"mlflow.token":              token,
+			"mlflow.certAndKey":         certAndKey,
+			"proxy.url":                 getProxyURL,
+			"proxy.noProxy":             "localhost",
+		},
+	}
 }

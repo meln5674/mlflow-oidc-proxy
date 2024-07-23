@@ -6,5 +6,9 @@ integration-test/*-configmap.yaml
 integration-test/groups
 integration-test/images
 integration-test/kubeconfig
+integration-test/Bike-Sharing-Dataset.zip
+integration-test/mlflow-config.json
+integration-test/hour.csv
+integration-test/day.csv
 coverprofile.out
 bin

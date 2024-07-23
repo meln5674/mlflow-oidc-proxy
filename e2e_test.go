@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 	"unicode"
@@ -229,139 +231,58 @@ func (s *subSuite) sessionSetup(ctx context.Context, g gingk8s.Gingk8s) {
 	s.keycloakLogin(true)
 }
 
-func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string) {
+// func (s *subSuite) loginAndRunNotebook(extraVars string, expectedSubject string) {
+func (s *subSuite) loginAndRunNotebook(ctx context.Context, uri, token, certAndKey, expectedSubject string) {
+
 	b := s.b
-	By("Going to Jupyterhub")
-	b.Navigate(fmt.Sprintf("https://%s/", jupyterhub.Set["ingress.hosts[0]"]))
-	Eventually(".btn.btn-jupyter.btn-lg", "30s").Should(b.Exist())
-	b.Click(".btn.btn-jupyter.btn-lg")
 
-	By("Navigating to the workspace root")
-	// The file browser loads so slowly, that by the time we've opened a terminal on a pre-warmed instance, it re-navigates to the cached location after we've already clicked the root button
-	// There doesn't seem to be any obvious element whose existence indicates the browser is actually finished loading
-	time.Sleep(15 * time.Second)
-	Expect(s.g.Kubectl(context.TODO(), &cluster, "describe", "pod", "jupyter-tenant-2d1").Run()).To(Succeed())
-	Expect(s.g.Kubectl(context.TODO(), &cluster, "describe", "nodes").Run()).To(Succeed())
-	rootFolderButton := ".jp-BreadCrumbs-home"
-	// This has a very long timeout because on github actions, the server pod takes a long time to provision
-	Eventually(rootFolderButton, "1m").Should(b.Exist())
-	// When running headless, for whatever reason,
-	// the button doesn't immediately generate a layout, which causes the scrollIntoView to fail
-	time.Sleep(15 * time.Second)
-	s.mouseClick(rootFolderButton, chromedp.ButtonLeft)
-	folder := `.jp-BreadCrumbs [title="mlflow-example"]`
-	Eventually(folder, "30s").ShouldNot(b.Exist())
+	By("Executing the test notebook in a job")
 
-	By("Opening a new launcher")
-	fileButton := `div[role="banner"] .lm-MenuBar-content > li:nth-child(1)`
-	Eventually(fileButton, "30s").Should(b.Exist())
-	s.mouseClick(fileButton, chromedp.ButtonLeft)
-	time.Sleep(1 * time.Second)
-	launcherButton := `div.lm-Widget.p-Widget.lm-Menu.p-Menu [data-command="filebrowser:create-main-launcher"]`
-	Eventually(launcherButton, "30s").Should(b.Exist())
-	s.mouseMove(launcherButton)
-	// Expect(chromedp.Run(b.Context, chromedp.QueryAfter(launcherButton, func(ctx context.Context, id cdpruntime.ExecutionContextID, nodes ...*cdp.Node) error {
-	// 	Expect(nodes).To(HaveLen(1))
-	// 	return MouseMoveNode(nodes[0]).Do(ctx)
-	// }))).To(Succeed())
-	//time.Sleep(5 * time.Second)
-	s.mouseClick(launcherButton, chromedp.ButtonLeft)
+	outputDir, err := os.MkdirTemp("integration-test", "notebook-output-*")
+	Expect(err).ToNot(HaveOccurred())
+	DeferCleanup(func() { os.RemoveAll(outputDir) })
 
-	// s.mouseClick(newLauncherButton, chromedp.ButtonLeft)
-	// For whatever reason, when using a selector, this element is selected twice
-	terminalButton := `div:not([aria-hidden="true"]) > div.lm-Widget.p-Widget.jp-Launcher div.jp-LauncherCard[title="Start a new terminal session"]`
-	Eventually(terminalButton, "10s").Should(b.Exist())
+	outputMount := filepath.Join("/mnt/host/mlflow-oidc-proxy/integration-test", filepath.Base(outputDir))
 
-	// time.Sleep(1 * time.Hour)
+	gk8s := s.g.ForSpec()
 
-	By("Opening a terminal")
-	s.mouseClick(terminalButton, chromedp.ButtonLeft)
-	// terminal := `div.jp-Terminal[label="notebook content"]`
-	terminal := "#jp-Terminal-0"
-	Eventually(terminal, "30s").Should(b.Exist())
+	gk8s.Release(clusterID, notebookJob(uri, token, certAndKey, "test-cert", outputMount))
+	gk8s.ClusterAction(clusterID, "Notebook Job Logs", &gingk8s.KubectlLogger{
+		Kind:          "job",
+		Name:          "run-notebook",
+		RetryPeriod:   2 * time.Second,
+		StopOnSuccess: true,
+	})
 
-	By("Executing the startup script")
-	testTS := time.Now().Unix()
-	sentinelButton := fmt.Sprintf(`li[title^="Name: get-example-done-%d"]`, testTS)
-	Expect(sentinelButton).ToNot(b.Exist())
-	startupScript := fmt.Sprintf("%s TEST_TS='%d' /mnt/host/mlflow-oidc-proxy/integration-test/get-example.sh\n", extraVars, testTS)
-	s.mouseClick(terminal)
-	// The terminal interface takes a moment to connect to the actual terminal running in the container, if we do this too early, keystrokes are lost
-	// Once again, there doesn't appear to be any element we can check for that indicates the terminal is connected
-	time.Sleep(2 * time.Second)
-	Expect(chromedp.Run(b.Context, KeyEventNoChar(startupScript))).To(Succeed())
-	Eventually(sentinelButton, "10m").Should(b.Exist())
-	folderButton := `li[title^="Name: mlflow-example"]`
-	Expect(folderButton).To(b.Exist())
-
-	By("Opening the example notebook")
-	s.mouseClick(folderButton, chromedp.ButtonLeft, chromedp.ClickCount(2))
-	notebookButton := `li.jp-DirListing-item[title^="Name: MLflow-example-notebook.ipynb"]`
-	Eventually(notebookButton, "30s").Should(b.Exist())
-	s.mouseClick(notebookButton, chromedp.ButtonLeft, chromedp.ClickCount(2))
-
-	By("Clearing all outputs")
-	restartButton := `button[title="Restart Kernel and Run All Cells…"]`
-	Eventually(restartButton, "30s").Should(b.Exist())
-	editButton := `.lm-MenuBar-content > li:nth-child(2)`
-	Expect(editButton).To(b.Exist())
-	s.mouseClick(editButton, chromedp.ButtonLeft)
-	clearButton := `div.lm-Widget.p-Widget.lm-Menu.p-Menu [data-command="editmenu:clear-all"]`
-	Eventually(clearButton, "30s").Should(b.Exist())
-	s.mouseMove(clearButton)
-	s.mouseClick(clearButton, chromedp.ButtonLeft)
-
-	By("Restarting the kernel and running the notebook")
-	s.mouseClick(restartButton, chromedp.ButtonLeft)
-	time.Sleep(1 * time.Second)
-	// Potential landmine:
-	// 	If the kernel is already started, we get a dialog to confirm the restart
-	//  If the kernel is not already started, we get a dialog to select the kernel
-	// The two buttons have an intersection of their classes, so this "should" work
-	acceptButton := ".jp-Dialog-button.jp-mod-accept"
-	Eventually(acceptButton, "30s").Should(b.Exist())
-	b.Click(acceptButton, chromedp.ButtonLeft)
-
-	cellFmt := func(ix int) string {
-		return fmt.Sprintf(`.jp-NotebookPanel > div:nth-child(3) > div:nth-child(%d)`, ix)
-	}
-	codeCellFmt := func(ix int) string {
-		return cellFmt(ix) + ".jp-CodeCell"
-	}
-	codeCellPromptFmt := func(ix int) string {
-		return codeCellFmt(ix) + " .jp-InputArea-prompt"
-	}
-	codeCellOutputFmt := func(ix int) string {
-		return codeCellFmt(ix) + " .jp-Cell-outputWrapper "
-	}
-	codeCellTextOutputFmt := func(ix int) string {
-		return codeCellOutputFmt(ix) + " .jp-OutputArea-output > pre"
-	}
-
-	for ix := 1; ix <= 57; ix++ {
-		cell := cellFmt(ix)
-		Expect(cell).To(b.Exist())
-		if !b.HasElement(codeCellFmt(ix)) {
-			By(fmt.Sprintf("Ignoring the %dth cell (not code)", ix))
-			continue
-		}
-		By(fmt.Sprintf("Waiting for the %dth cell to start", ix))
-		// time.Sleep(1 * time.Second)
-		prompt := codeCellPromptFmt(ix)
-		b.InvokeOn(prompt, "scrollIntoView")
-		Eventually(func() string { return b.InnerText(prompt) }, "2m").ShouldNot(Equal("[ ]:"))
-
-		By(fmt.Sprintf("Waiting for the %dth cell to finish", ix))
-		output := codeCellOutputFmt(ix)
-		Eventually(output).Should(b.Exist())
-		b.InvokeOn(output, "scrollIntoView")
-		Eventually(func() string { return b.InnerText(prompt) }, "20m").ShouldNot(Equal("[*]:"))
-	}
+	gk8s.Setup(ctx)
 
 	By("Parsing the final cell's output as JSON")
 
 	var output PredictionOutput
-	Expect(json.Unmarshal([]byte(b.InnerText(codeCellTextOutputFmt(57))), &output)).To(Succeed())
+	/*
+		Expect(json.Unmarshal([]byte(b.InnerText(codeCellTextOutputFmt(57))), &output)).To(Succeed())
+		Expect(output.Predictions).To(HaveLen(1))
+	*/
+
+	f, err := os.Open(filepath.Join(outputDir, "MLflow-example-notebook.ipynb"))
+	Expect(err).ToNot(HaveOccurred())
+
+	var notebook map[string]interface{}
+	Expect(json.NewDecoder(f).Decode(&notebook)).To(Succeed())
+
+	Expect(notebook).To(HaveKey("cells"))
+	cells := notebook["cells"].([]interface{})
+
+	Expect(cells).To(HaveLen(58))
+	finalCell := cells[56].(map[string]interface{})
+
+	Expect(finalCell).To(HaveKeyWithValue("outputs", HaveLen(1)))
+	finalCellOutput := finalCell["outputs"].([]interface{})[0].(map[string]interface{})
+	Expect(finalCellOutput).To(HaveKey("text"))
+
+	finalCellOutputText := finalCellOutput["text"].([]interface{})[0].(string)
+
+	Expect(json.Unmarshal([]byte(finalCellOutputText), &output)).To(Succeed())
 	Expect(output.Predictions).To(HaveLen(1))
 
 	By("Navigating to the MLFlow tenant")
@@ -394,11 +315,12 @@ func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSec
 		s.b.Prepare()
 	})
 	Describe("Tenant 1", func() {
-		It("should execute an mlflow jupyterlab notebook with a generated token", func() {
+		It("should execute an mlflow jupyterlab notebook with a generated token", func(ctx context.Context) {
 			apiToken := s.keycloakToken(false)
 			s.keycloakLogin(false)
 
-			s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_TOKEN='%s' MLFLOW_TRACKING_URI='%s' `, apiToken, "https://mlflow.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "tenant-1")
+			// s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_TOKEN='%s' MLFLOW_TRACKING_URI='%s' `, apiToken, "https://mlflow.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "tenant-1")
+			s.loginAndRunNotebook(ctx, "https://mlflow.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/", apiToken, "", "tenant-1")
 		})
 
 		It("should execute an mlflow jupyterlab notebook with a robot certificate", func(ctx context.Context) {
@@ -406,14 +328,16 @@ func (s *subSuite) cases(robotCertSecretName string, robotTokenSecretName, caSec
 			robotCert := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotCertSecretName, "tls.crt")
 			s.keycloakLogin(false)
 
-			s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_CLIENT_CERT_AND_KEY='%s' MLFLOW_TRACKING_URI='%s'`, robotKey+"\n"+robotCert, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "robot-1")
+			// s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_CLIENT_CERT_AND_KEY='%s' MLFLOW_TRACKING_URI='%s'`, robotKey+"\n"+robotCert, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "robot-1")
+			s.loginAndRunNotebook(ctx, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/", "", robotKey+"\n"+robotCert, "robot-1")
 		})
 
 		It("should execute an mlflow jupyterlab notebook with a robot token", func(ctx context.Context) {
 			robotToken := gk8s.KubectlReturnSecretValue(ctx, &cluster, robotTokenSecretName, "token")
 			s.keycloakLogin(false)
 
-			s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_TOKEN='%s' MLFLOW_TRACKING_URI='%s'`, robotToken, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "robot-3")
+			// s.loginAndRunNotebook(fmt.Sprintf(`MLFLOW_TRACKING_TOKEN='%s' MLFLOW_TRACKING_URI='%s'`, robotToken, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/"), "robot-3")
+			s.loginAndRunNotebook(ctx, "https://mlflow-api.mlflow-oidc-proxy-it.cluster/tenants/tenant-1/", robotToken, "", "robot-3")
 		})
 	})
 
@@ -571,16 +495,16 @@ var _ = Describe("Standalone setup", Ordered, func() {
 			keycloakSetupID, waitForIngressWebhookID,
 		)
 
-		jupyterhubID := gk8s.Release(clusterID, &jupyterhub,
+		/*jupyterhubID := gk8s.Release(clusterID, &jupyterhub,
 			keycloakID,
 			keycloakSetupID, waitForIngressWebhookID, postgresSecretsReadyID,
-		)
+		)*/
 
 		/*terminals := */
 		_ = gingk8s.ResourceDependencies{
 			Releases: append(
 				[]gingk8s.ReleaseID{
-					jupyterhubID,
+					// jupyterhubID,
 					mlflowOIDCProxyID,
 					oauth2ProxyID,
 				},
@@ -650,7 +574,7 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 
 	When("using object store", func() {
 		BeforeAll(func() {
-			gk8s := s.g
+			gk8s := s.g.ForSpec()
 			mlflowID := gk8s.Release(clusterID, &mlflowMultitenantObjectStore)
 			gk8s.ClusterAction(
 				clusterID,
@@ -673,12 +597,13 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 			}), mlflowID)
 			gk8s.Manifests(clusterID, &certsNoIssuer, mlflowID)
 
-			postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, mlflowID)
+			// postgresSecretsReadyID :=
+			gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, mlflowID)
 
-			gk8s.Release(clusterID, &jupyterhub2,
+			/*gk8s.Release(clusterID, &jupyterhub2,
 				mlflowID,
 				postgresSecretsReadyID,
-			)
+			)*/
 			ctx, cancel := context.WithCancel(context.Background())
 			DeferCleanup(cancel)
 			gk8s.Setup(ctx)
@@ -688,7 +613,7 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 
 	When("using pvc store", func() {
 		BeforeAll(func() {
-			gk8s := s.g
+			gk8s := s.g.ForSpec()
 			mlflowID := gk8s.Release(clusterID, &mlflowMultitenantPVCStore)
 			gk8s.ClusterAction(
 				clusterID,
@@ -712,12 +637,13 @@ var _ = Describe("Omnibus setup", Ordered, func() {
 
 			gk8s.Manifests(clusterID, &certsNoIssuer, mlflowID)
 
-			postgresSecretsReadyID := gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, mlflowID)
+			// postgresSecretsReadyID :=
+			gk8s.ClusterAction(clusterID, "Wait for Postgres Secrets", multitenantPostgresSecretsReady, mlflowID)
 
-			gk8s.Release(clusterID, &jupyterhub2,
+			/*gk8s.Release(clusterID, &jupyterhub2,
 				mlflowID,
 				postgresSecretsReadyID,
-			)
+			)*/
 			ctx, cancel := context.WithCancel(context.Background())
 			DeferCleanup(cancel)
 			gk8s.Setup(ctx)
@@ -746,16 +672,18 @@ var _ = Describe("Omnibus setup in Default Configuration", Ordered, func() {
 
 		// gk8s.ClusterAction(clusterID, "Keycloak 0 Logs", &gingk8s.KubectlLogger{Kind: "pod", Name: "mlflow-multitenant-keycloak-0", RetryPeriod: 15 * time.Second})
 		gk8s.ClusterAction(clusterID, "Keycloak Configuration Job Logs", &gingk8s.KubectlLogger{
-			Kind:        "job",
-			Name:        "mlflow-multitenant-configure-keycloak-1",
-			RetryPeriod: 15 * time.Second,
-			Flags:       []string{"-c", "config"},
+			Kind:          "job",
+			Name:          "mlflow-multitenant-configure-keycloak-1",
+			RetryPeriod:   15 * time.Second,
+			Flags:         []string{"-c", "config"},
+			StopOnSuccess: true,
 		})
 		gk8s.ClusterAction(clusterID, "Minio Configuration Job Logs", &gingk8s.KubectlLogger{
-			Kind:        "job",
-			Name:        "mlflow-multitenant-configure-minio-1",
-			RetryPeriod: 15 * time.Second,
-			Flags:       []string{"-c", "config"},
+			Kind:          "job",
+			Name:          "mlflow-multitenant-configure-minio-1",
+			RetryPeriod:   15 * time.Second,
+			Flags:         []string{"-c", "config"},
+			StopOnSuccess: true,
 		})
 
 		waitForPostgresDeletionID := gk8s.ClusterAction(clusterID, "Wait for postgres to be cleaned up before deleting operator", waitForPostgresDeletion, mlflowDepsID)
