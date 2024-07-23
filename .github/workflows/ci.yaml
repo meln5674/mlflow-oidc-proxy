@@ -58,7 +58,7 @@ jobs:
       - name: Lint standalone chart
         run: |
           cd deploy/helm/mlflow-oidc-proxy
-          ../../../bin/helm dependency update
+          ../../../bin/helm dependency build
           ../../../bin/helm-hog test --no-apply --batch --auto-remove-success --parallel=0
       - name: Lint omnibus dependencies chart
         run: |
@@ -103,8 +103,9 @@ jobs:
       - name: Install Dependencies
         run: |
           make deps 
-          cd deploy/helm/mlflow-multitenant
-          ../../../bin/helm dependency build
+          bin/helm dependency build deploy/helm/mlflow-oidc-proxy
+          bin/helm dependency build deploy/helm/mlflow-multitenant
+          bin/helm dependency build deploy/helm/mlflow-multitenant-deps
 
       # Tests
       - name: Unit Tests

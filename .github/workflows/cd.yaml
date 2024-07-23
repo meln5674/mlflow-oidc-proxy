@@ -57,7 +57,7 @@ jobs:
       - name: Lint standalone chart
         run: |
           cd deploy/helm/mlflow-oidc-proxy
-          ../../../bin/helm dependency update
+          ../../../bin/helm dependency build
           ../../../bin/helm-hog test --no-apply --batch --auto-remove-success --parallel=0
       - name: Lint omnibus dependencies chart
         run: |
@@ -67,7 +67,7 @@ jobs:
       - name: Lint omnibus chart
         run: |
           cd deploy/helm/mlflow-multitenant
-          ../../../bin/helm dependency update
+          ../../../bin/helm dependency build
           ../../../bin/helm-hog test --no-apply --batch --auto-remove-success --parallel=0
 
   test:
@@ -102,6 +102,9 @@ jobs:
       - name: Install Dependencies
         run: |
           make deps 
+          bin/helm dependency build deploy/helm/mlflow-oidc-proxy
+          bin/helm dependency build deploy/helm/mlflow-multitenant
+          bin/helm dependency build deploy/helm/mlflow-multitenant-deps
 
       # Tests
       - name: Unit Tests
@@ -287,7 +290,7 @@ jobs:
           helm push bin/mlflow-oidc-proxy-*.tgz "${HELM_REPO}"
           helm push bin/mlflow-multitenant-deps-*.tgz "${HELM_REPO}"
           rm -rf bin/*.tgz # The wildcard below matches the deps chart, this is a hack-y workaround
-          helm dependency update deploy/helm/mlflow-multitenant
+          helm dependency build deploy/helm/mlflow-multitenant
           helm package deploy/helm/mlflow-multitenant/ --destination bin
           helm push bin/mlflow-multitenant-*.tgz "${HELM_REPO}"
 
