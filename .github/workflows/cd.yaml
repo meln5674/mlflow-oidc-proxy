@@ -33,18 +33,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       
-      - uses: actions/setup-go@v4
-        with:
-          go-version: '^${{ env.GO_VERSION }}'
-
       - name: Install Dependencies
         run: |
-          make -j deps all-helm-tools chart-deps
+          ./build-env.sh make -j deps all-helm-tools chart-deps
 
       # Run Linter
       - name: Lint standalone chart
         run: |
-          make helm-hog
+          ./build-env.sh make helm-hog
 
   test:
     # runs-on: ubuntu-latest
@@ -202,9 +198,12 @@ jobs:
           ./build-env.sh make -j all-helm-tools
           ./build-env.sh helm repo add jetstack https://charts.jetstack.io
           ./build-env.sh helm repo add zalando https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+          ./build-env.sh helm repo add mino https://charts.min.io/
           ./build-env.sh make -j chart-deps
 
       - name: Log into Registry
+        env:
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         run: |
           ./build-env.sh helm registry login "${REGISTRY}" -u "${GITHUB_ACTOR}" -p "${GITHUB_TOKEN}"
 
@@ -212,15 +211,13 @@ jobs:
         env:
           GIT_TAG: '${{ steps.tagName.outputs.tag }}'
         run: |
-          ./build-env.sh ./set-chart-versions "${HELM_REPO}" "${GIT_TAG}" "${GITHUB_SHA}"
+          ./build-env.sh ./set-chart-versions.sh "${HELM_REPO}" "${GITHUB_SHA}" "${GIT_TAG}" 
           ./build-env.sh make -j charts
 
       # Release charts
       - name: Push Charts
-        env:
-          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         run: |
           for chart in bin/charts/*.tgz ; do
-            helm push "${chart}" "${HELM_REPO}"
+            ./build-env.sh helm push "${chart}" "${HELM_REPO}"
           done
 
