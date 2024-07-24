@@ -28,6 +28,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const (
+	RunningInContainerEnv = "RUNNING_IN_CONTAINER"
+)
+
+var (
+	runningInContainer = os.Getenv(RunningInContainerEnv) != ""
+)
+
 type PredictionOutput struct {
 	Predictions []float64
 }
@@ -230,11 +238,17 @@ func (s *subSuite) keycloakLogin(ctx context.Context, needCredentials bool) {
 func (s *subSuite) sessionSetup(ctx context.Context, g gingk8s.Gingk8s) {
 	proxy, err := getProxyURL(g, ctx, &cluster)
 	Expect(err).ToNot(HaveOccurred())
-	biloba.SpinUpChrome(GinkgoT(),
+	bopts := []chromedp.ExecAllocatorOption{
 		chromedp.ProxyServer(proxy),
 		//chromedp.Flag("headless", false),
 		chromedp.Flag("ignore-certificate-errors", "1"),
-	)
+	}
+	if runningInContainer {
+		bopts = append(bopts, chromedp.NoSandbox)
+		GinkgoWriter.Printf("!!! WARNING: Sandbox disabled due to containerized environment detected from %s. This is insecure if this not actually a container!\n", RunningInContainerEnv)
+	}
+
+	biloba.SpinUpChrome(GinkgoT(), bopts...)
 	s.b = biloba.ConnectToChrome(GinkgoT())
 	s.keycloakLogin(ctx, true)
 }

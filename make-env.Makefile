@@ -97,7 +97,7 @@ DOCKER_URL ?= $(DOCKER_MIRROR)/$(DOCKER_ARCH)/docker-$(DOCKER_VERSION).tgz
 $(DOCKER):  	
 	
 	$(MAKE_ENV_MKDIR) -p $(LOCALBIN)/.make-env/http/$(shell echo $(DOCKER_URL) | base64 -w0)
-	$(MAKE_ENV_CURL) -vfL $(DOCKER_URL) | tar -x -z  -C $(LOCALBIN)/.make-env/http/$(shell echo $(DOCKER_URL) | base64 -w0) docker/docker
+	$(MAKE_ENV_CURL) -vfL $(DOCKER_URL) | tar -x -z -C $(LOCALBIN)/.make-env/http/$(shell echo $(DOCKER_URL) | base64 -w0) docker/docker
 	$(MAKE_ENV_CHMOD) +x $(LOCALBIN)/.make-env/http/$(shell echo $(DOCKER_URL) | base64 -w0)/docker/docker
 	$(MAKE_ENV_RM) -f $(DOCKER)
 	$(MAKE_ENV_LN) -s $(LOCALBIN)/.make-env/http/$(shell echo $(DOCKER_URL) | base64 -w0)/docker/docker $(DOCKER)
@@ -146,7 +146,7 @@ HELM_URL ?= https://get.helm.sh/helm-$(HELM_VERSION)-$(GO_OS)-$(GO_ARCH).tar.gz
 $(HELM):  	
 	
 	$(MAKE_ENV_MKDIR) -p $(LOCALBIN)/.make-env/http/$(shell echo $(HELM_URL) | base64 -w0)
-	$(MAKE_ENV_CURL) -vfL $(HELM_URL) | tar -x -z  -C $(LOCALBIN)/.make-env/http/$(shell echo $(HELM_URL) | base64 -w0) $(GO_OS)-$(GO_ARCH)/helm
+	$(MAKE_ENV_CURL) -vfL $(HELM_URL) | tar -x -z -C $(LOCALBIN)/.make-env/http/$(shell echo $(HELM_URL) | base64 -w0) $(GO_OS)-$(GO_ARCH)/helm
 	$(MAKE_ENV_CHMOD) +x $(LOCALBIN)/.make-env/http/$(shell echo $(HELM_URL) | base64 -w0)/$(GO_OS)-$(GO_ARCH)/helm
 	$(MAKE_ENV_RM) -f $(HELM)
 	$(MAKE_ENV_LN) -s $(LOCALBIN)/.make-env/http/$(shell echo $(HELM_URL) | base64 -w0)/$(GO_OS)-$(GO_ARCH)/helm $(HELM)
@@ -212,7 +212,7 @@ YQ_URL ?= https://$(YQ_MIRROR)/$(YQ_VERSION)/yq_$(GO_OS)_$(GO_ARCH).tar.gz
 $(YQ):  	
 	
 	$(MAKE_ENV_MKDIR) -p $(LOCALBIN)/.make-env/http/$(shell echo $(YQ_URL) | base64 -w0)
-	$(MAKE_ENV_CURL) -vfL $(YQ_URL) | tar -x -z  -C $(LOCALBIN)/.make-env/http/$(shell echo $(YQ_URL) | base64 -w0) ./yq_$(GO_OS)_$(GO_ARCH)
+	$(MAKE_ENV_CURL) -vfL $(YQ_URL) | tar -x -z -C $(LOCALBIN)/.make-env/http/$(shell echo $(YQ_URL) | base64 -w0) ./yq_$(GO_OS)_$(GO_ARCH)
 	$(MAKE_ENV_CHMOD) +x $(LOCALBIN)/.make-env/http/$(shell echo $(YQ_URL) | base64 -w0)/./yq_$(GO_OS)_$(GO_ARCH)
 	$(MAKE_ENV_RM) -f $(YQ)
 	$(MAKE_ENV_LN) -s $(LOCALBIN)/.make-env/http/$(shell echo $(YQ_URL) | base64 -w0)/./yq_$(GO_OS)_$(GO_ARCH) $(YQ)

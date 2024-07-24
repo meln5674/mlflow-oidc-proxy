@@ -2,6 +2,8 @@
 ARG DOCKER_ARCH=x86_64
 ARG GO_ARCH=$(shell go env GOARCH)
 ARG GO_OS=$(shell go env GOOS)
+ARG CHROME_IMAGE=docker.io/chromedp/headless-shell
+ARG CHROME_VERSION=116.0.5845.14
 ARG MAKE_ENV_BASE64=base64
 ARG MAKE_ENV_CHMOD=chmod
 ARG MAKE_ENV_CURL=curl
@@ -28,12 +30,14 @@ ARG MAKE_ENV_UNZIP
 ARG DOCKER_ARCH
 ARG GO_ARCH
 ARG GO_OS
+ARG CHROME_IMAGE
+ARG CHROME_VERSION
 ARG DOCKER_MIRROR=https://download.docker.com/linux/static/stable
 ARG DOCKER_VERSION=27.1.0
 
 ARG DOCKER_URL=${DOCKER_MIRROR}/${DOCKER_ARCH}/docker-${DOCKER_VERSION}.tgz
 RUN ${MAKE_ENV_MKDIR} -p /opt/make-env/download /opt/make-env/bin \
- && ${MAKE_ENV_CURL} -vfL ${DOCKER_URL} | tar -x -z  -C /opt/make-env/download docker/docker \
+ && ${MAKE_ENV_CURL} -vfL ${DOCKER_URL} | tar -x -z -C /opt/make-env/download docker/docker \
  && ${MAKE_ENV_MV} /opt/make-env/download/docker/docker /opt/make-env/bin/docker \
  && ${MAKE_ENV_CHMOD} +x /opt/make-env/bin/docker
 FROM docker.io/alpine/curl:8.8.0 AS make-env-docker-buildx
@@ -51,6 +55,8 @@ ARG MAKE_ENV_UNZIP
 ARG DOCKER_ARCH
 ARG GO_ARCH
 ARG GO_OS
+ARG CHROME_IMAGE
+ARG CHROME_VERSION
 ARG DOCKER_BUILDX_MIRROR=https://github.com/docker/buildx/releases/download
 ARG DOCKER_BUILDX_VERSION=v0.16.1
 
@@ -74,6 +80,8 @@ ARG MAKE_ENV_UNZIP
 ARG DOCKER_ARCH
 ARG GO_ARCH
 ARG GO_OS
+ARG CHROME_IMAGE
+ARG CHROME_VERSION
 ARG GINKGO_VERSION=$(shell go mod edit -print | grep ginkgo | cut -d ' ' -f2)
 
 RUN GOBIN=/opt/make-env/bin \
@@ -94,12 +102,14 @@ ARG MAKE_ENV_UNZIP
 ARG DOCKER_ARCH
 ARG GO_ARCH
 ARG GO_OS
+ARG CHROME_IMAGE
+ARG CHROME_VERSION
 ARG HELM_MIRROR=https://dl.k8s.io/release
 ARG HELM_VERSION=v3.12.2
 
 ARG HELM_URL=https://get.helm.sh/helm-${HELM_VERSION}-${GO_OS}-${GO_ARCH}.tar.gz
 RUN ${MAKE_ENV_MKDIR} -p /opt/make-env/download /opt/make-env/bin \
- && ${MAKE_ENV_CURL} -vfL ${HELM_URL} | tar -x -z  -C /opt/make-env/download ${GO_OS}-${GO_ARCH}/helm \
+ && ${MAKE_ENV_CURL} -vfL ${HELM_URL} | tar -x -z -C /opt/make-env/download ${GO_OS}-${GO_ARCH}/helm \
  && ${MAKE_ENV_MV} /opt/make-env/download/${GO_OS}-${GO_ARCH}/helm /opt/make-env/bin/helm \
  && ${MAKE_ENV_CHMOD} +x /opt/make-env/bin/helm
 FROM docker.io/library/golang:1.19 AS make-env-helm-hog
@@ -117,6 +127,8 @@ ARG MAKE_ENV_UNZIP
 ARG DOCKER_ARCH
 ARG GO_ARCH
 ARG GO_OS
+ARG CHROME_IMAGE
+ARG CHROME_VERSION
 
 RUN GOBIN=/opt/make-env/bin \
     ${MAKE_ENV_GO} install \
@@ -136,6 +148,8 @@ ARG MAKE_ENV_UNZIP
 ARG DOCKER_ARCH
 ARG GO_ARCH
 ARG GO_OS
+ARG CHROME_IMAGE
+ARG CHROME_VERSION
 ARG KIND_MIRROR=https://github.com/kubernetes-sigs/kind/releases/download
 ARG KIND_VERSION=v0.17.0
 
@@ -159,6 +173,8 @@ ARG MAKE_ENV_UNZIP
 ARG DOCKER_ARCH
 ARG GO_ARCH
 ARG GO_OS
+ARG CHROME_IMAGE
+ARG CHROME_VERSION
 ARG KUBECTL_MIRROR=https://dl.k8s.io/release
 ARG KUBECTL_VERSION=v1.25.11
 
@@ -182,19 +198,29 @@ ARG MAKE_ENV_UNZIP
 ARG DOCKER_ARCH
 ARG GO_ARCH
 ARG GO_OS
+ARG CHROME_IMAGE
+ARG CHROME_VERSION
 ARG YQ_MIRROR=github.com/mikefarah/yq/releases/download
 ARG YQ_VERSION=v4.44.1
 
 ARG YQ_URL=https://${YQ_MIRROR}/${YQ_VERSION}/yq_${GO_OS}_${GO_ARCH}.tar.gz
 RUN ${MAKE_ENV_MKDIR} -p /opt/make-env/download /opt/make-env/bin \
- && ${MAKE_ENV_CURL} -vfL ${YQ_URL} | tar -x -z  -C /opt/make-env/download ./yq_${GO_OS}_${GO_ARCH} \
+ && ${MAKE_ENV_CURL} -vfL ${YQ_URL} | tar -x -z -C /opt/make-env/download ./yq_${GO_OS}_${GO_ARCH} \
  && ${MAKE_ENV_MV} /opt/make-env/download/./yq_${GO_OS}_${GO_ARCH} /opt/make-env/bin/yq \
  && ${MAKE_ENV_CHMOD} +x /opt/make-env/bin/yq
+FROM ${CHROME_IMAGE}:${CHROME_VERSION} AS chrome
+
 
 FROM docker.io/library/golang:1.20.4
 ARG LOCALBIN=/usr/bin
 ENV LOCALBIN=${LOCALBIN}
 ENV PATH=${PATH}:${LOCALBIN}
+RUN \
+  apt-get update -y \
+  && apt-get install -y libnspr4 libnss3 libexpat1 libfontconfig1 libuuid1 \
+  && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+COPY --from=chrome /headless-shell/ /headless-shell/
+
 COPY --from=make-env-docker /opt/make-env/bin/. ${LOCALBIN}/
 COPY --from=make-env-docker-buildx /opt/make-env/bin/. ${LOCALBIN}/
 COPY --from=make-env-ginkgo /opt/make-env/bin/. ${LOCALBIN}/
@@ -205,5 +231,8 @@ COPY --from=make-env-kubectl /opt/make-env/bin/. ${LOCALBIN}/
 COPY --from=make-env-yq /opt/make-env/bin/. ${LOCALBIN}/
 RUN mkdir -p /usr/lib/docker/cli-plugins \
  && ln -s ${LOCALBIN}/docker-buildx /usr/lib/docker/cli-plugins/
+ENV LANG en-US.UTF-8
+ENV PATH /headless-shell:$PATH
+ENV RUNNING_IN_CONTAINER=1
 
 

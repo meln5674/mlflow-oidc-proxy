@@ -83,6 +83,23 @@ dockerfile:
   from: docker.io/library/golang:1.20.4
   goImage: docker.io/library/golang:1.19
   curlImage: docker.io/alpine/curl:8.8.0
+  args:
+    CHROME_IMAGE: docker.io/chromedp/headless-shell
+    CHROME_VERSION: 116.0.5845.14
+
+  extraStages: |
+    FROM ${CHROME_IMAGE}:${CHROME_VERSION} AS chrome
+  preCopy: |
+    RUN \
+      apt-get update -y \
+      && apt-get install -y libnspr4 libnss3 libexpat1 libfontconfig1 libuuid1 \
+      && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    COPY --from=chrome /headless-shell/ /headless-shell/
+
   postCopy: |
     RUN mkdir -p /usr/lib/docker/cli-plugins \
      && ln -s ${LOCALBIN}/docker-buildx /usr/lib/docker/cli-plugins/
+    ENV LANG=en-US.UTF-8
+    ENV PATH=/headless-shell:$PATH
+    ENV RUNNING_IN_CONTAINER=1
+
