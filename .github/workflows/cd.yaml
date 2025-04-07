@@ -220,7 +220,7 @@ jobs:
           GIT_TAG: '${{ steps.tagName.outputs.tag }}'
         run: |
           ./build-env.sh ./set-chart-versions.sh "${HELM_REPO}" "${GITHUB_SHA}" "${GIT_TAG}" 
-          ./build-env.sh make -j charts
+          ./build-env.sh make charts
 
       # Release charts
       - name: Push Charts
