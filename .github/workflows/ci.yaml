@@ -43,6 +43,10 @@ jobs:
       
       - name: Install Dependencies
         run: |
+          ./build-env.sh make -j all-helm-tools
+          ./build-env.sh helm repo add jetstack https://charts.jetstack.io
+          ./build-env.sh helm repo add zalando https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+          ./build-env.sh helm repo add mino https://charts.min.io/
           ./build-env.sh make -j deps all-helm-tools chart-deps
 
       # Run Linter
@@ -73,6 +77,11 @@ jobs:
 
       - name: Install Dependencies
         run: |
+
+          ./build-env.sh make -j all-helm-tools
+          ./build-env.sh helm repo add jetstack https://charts.jetstack.io
+          ./build-env.sh helm repo add zalando https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+          ./build-env.sh helm repo add mino https://charts.min.io/
           ./build-env.sh make -j deps all-test-tools all-e2e-tools chart-deps
 
       # Tests
