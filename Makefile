@@ -77,10 +77,18 @@ bin/charts/mlflow-multitenant-$(MLFLOW_MULTITENANT_CHART_VERISON).tgz: all-helm-
 bin/charts/mlflow-multitenant-deps-$(MLFLOW_MULTITENANT_DEPS_CHART_VERISON).tgz: all-helm-tools $(CHART_DIR)/mlflow-multitenant-deps/Chart.lock
 	helm package $(CHART_DIR)/mlflow-multitenant-deps --destination bin/charts
 
-CHARTS=\
+BASE_CHARTS=\
 	bin/charts/mlflow-oidc-proxy-$(MLFLOW_OIDC_PROXY_CHART_VERISON).tgz \
-	bin/charts/mlflow-multitenant-$(MLFLOW_MULTITENANT_CHART_VERISON).tgz \
 	bin/charts/mlflow-multitenant-deps-$(MLFLOW_MULTITENANT_DEPS_CHART_VERISON).tgz \
+
+.PHONY: base-charts
+base-charts: $(BASE_CHARTS)
+
+
+
+CHARTS=\
+	$(BASE_CHARTS) \
+	bin/charts/mlflow-multitenant-$(MLFLOW_MULTITENANT_CHART_VERISON).tgz \
 
 .PHONY: charts
 charts: $(CHARTS)

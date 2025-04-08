@@ -215,17 +215,33 @@ jobs:
         run: |
           ./build-env.sh helm registry login "${REGISTRY}" -u "${GITHUB_ACTOR}" -p "${GITHUB_TOKEN}"
 
-      - name: Package Charts
+      - name: Set Chart Versions and Repositories
         env:
           GIT_TAG: '${{ steps.tagName.outputs.tag }}'
         run: |
           ./build-env.sh ./set-chart-versions.sh "${HELM_REPO}" "${GITHUB_SHA}" "${GIT_TAG}" 
+
+      - name: Package Base Charts
+        env:
+          GIT_TAG: '${{ steps.tagName.outputs.tag }}'
+        run: |
+          ./build-env.sh make base-charts
+
+      - name: Push Base Charts
+        run: |
+          for chart in bin/charts/{mlflow-oidc-proxy,mlflow-multitenant-deps}-*.tgz ; do
+            ./build-env.sh helm push "${chart}" "${HELM_REPO}"
+          done
+
+      - name: Package Multitenant Chart
+        env:
+          GIT_TAG: '${{ steps.tagName.outputs.tag }}'
+        run: |
           ./build-env.sh make charts
 
-      # Release charts
-      - name: Push Charts
+      - name: Push Multitenant Chart
         run: |
-          for chart in bin/charts/*.tgz ; do
+          for chart in bin/charts/mlflow-multitenant-*.tgz ; do
             ./build-env.sh helm push "${chart}" "${HELM_REPO}"
           done
 
